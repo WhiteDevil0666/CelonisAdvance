@@ -1,6 +1,5 @@
 import streamlit as st
 from groq import Groq
-from sentence_transformers import SentenceTransformer
 import faiss
 import numpy as np
 import pickle
@@ -8,7 +7,7 @@ import re
 import base64
 import PyPDF2
 import pandas as pd
-from io import BytesIO
+from sentence_transformers import SentenceTransformer
 
 # =====================================
 # PAGE CONFIG
@@ -21,40 +20,35 @@ st.set_page_config(
 )
 
 # =====================================
-# BACKGROUND IMAGE
+# BACKGROUND IMAGE (SAFE)
 # =====================================
 
 def set_background(image_file):
-    with open(image_file, "rb") as f:
-        encoded = base64.b64encode(f.read()).decode()
+    try:
+        with open(image_file, "rb") as f:
+            encoded = base64.b64encode(f.read()).decode()
 
-    st.markdown(f"""
-    <style>
-    .stApp {{
-        background:
-            linear-gradient(rgba(0,0,0,0.85), rgba(0,0,0,0.85)),
-            url("data:image/png;base64,{encoded}");
-        background-size: cover;
-        background-position: center;
-        background-attachment: fixed;
-    }}
-    .block-container {{
-        padding-top: 2rem;
-        padding-bottom: 0rem;
-    }}
-    .stChatMessage {{
-        background-color: rgba(20,20,30,0.85);
-        border-radius: 12px;
-        padding: 12px;
-    }}
-    section[data-testid="stSidebar"] {{
-        background-color: rgba(15,15,25,0.95);
-    }}
-    h1, h2, h3, p, div, span {{
-        color: white !important;
-    }}
-    </style>
-    """, unsafe_allow_html=True)
+        st.markdown(f"""
+        <style>
+        .stApp {{
+            background:
+                linear-gradient(rgba(0,0,0,0.85), rgba(0,0,0,0.85)),
+                url("data:image/png;base64,{encoded}");
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+        }}
+        .block-container {{
+            padding-top: 2rem;
+            padding-bottom: 0rem;
+        }}
+        h1, h2, h3, p, div, span {{
+            color: white !important;
+        }}
+        </style>
+        """, unsafe_allow_html=True)
+    except:
+        pass
 
 set_background("background.png")
 
@@ -64,10 +58,33 @@ set_background("background.png")
 
 MODEL_NAME = "llama-3.1-8b-instant"
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
-EMBED_MODEL = SentenceTransformer("all-MiniLM-L6-v2")
 
 # =====================================
-# SYSTEM PROMPT
+# SAFE MODEL LOADING
+# =====================================
+
+@st.cache_resource(show_spinner=False)
+def load_embedding_model():
+    try:
+        return SentenceTransformer("all-MiniLM-L6-v2")
+    except:
+        return None
+
+@st.cache_resource(show_spinner=False)
+def load_vector_store():
+    try:
+        index = faiss.read_index("pql_faiss.index")
+        with open("pql_metadata.pkl", "rb") as f:
+            metadata = pickle.load(f)
+        return index, metadata
+    except:
+        return None, None
+
+EMBED_MODEL = load_embedding_model()
+index, metadata = load_vector_store()
+
+# =====================================
+# SYSTEM PROMPT (UNCHANGED)
 # =====================================
 
 SYSTEM_PROMPT = """
@@ -93,19 +110,6 @@ STRICT RULES:
 """
 
 # =====================================
-# LOAD VECTOR STORE
-# =====================================
-
-@st.cache_resource
-def load_vector_store():
-    index = faiss.read_index("pql_faiss.index")
-    with open("pql_metadata.pkl", "rb") as f:
-        metadata = pickle.load(f)
-    return index, metadata
-
-index, metadata = load_vector_store()
-
-# =====================================
 # SESSION STATE
 # =====================================
 
@@ -119,44 +123,49 @@ if "file_text" not in st.session_state:
     st.session_state.file_text = ""
 
 # =====================================
-# FILE UPLOAD SECTION
+# FILE UPLOAD (SAFE)
 # =====================================
 
 st.sidebar.header("📂 Upload Process File")
 
 uploaded_file = st.sidebar.file_uploader(
-    "Upload PDF, Excel or TXT",
+    "Upload PDF, Excel or TXT (Max 5MB)",
     type=["pdf", "xlsx", "xls", "txt"]
 )
 
+MAX_FILE_SIZE_MB = 5
+
 if uploaded_file:
-    file_text = ""
 
-    if uploaded_file.type == "application/pdf":
-        pdf_reader = PyPDF2.PdfReader(uploaded_file)
-        for page in pdf_reader.pages:
-            file_text += page.extract_text()
+    if uploaded_file.size > MAX_FILE_SIZE_MB * 1024 * 1024:
+        st.sidebar.error("File too large (Max 5MB)")
+    else:
+        file_text = ""
 
-    elif "sheet" in uploaded_file.type:
-        df = pd.read_excel(uploaded_file)
-        file_text = df.to_string()
+        try:
+            if uploaded_file.type == "application/pdf":
+                pdf_reader = PyPDF2.PdfReader(uploaded_file)
+                for page in pdf_reader.pages:
+                    page_text = page.extract_text()
+                    if page_text:
+                        file_text += page_text
 
-    elif uploaded_file.type == "text/plain":
-        file_text = uploaded_file.read().decode()
+            elif "sheet" in uploaded_file.type:
+                df = pd.read_excel(uploaded_file)
+                file_text = df.head(500).to_string()  # limit rows
 
-    st.session_state.file_mode = True
-    st.session_state.file_text = file_text
-    st.sidebar.success("File loaded successfully!")
+            elif uploaded_file.type == "text/plain":
+                file_text = uploaded_file.read().decode()
 
-# =====================================
-# ADVANCED PROCESS INTELLIGENCE
-# =====================================
+            # Limit file size to avoid LLM overload
+            file_text = file_text[:8000]
 
-st.sidebar.header("🧠 Advanced Process Intelligence")
+            st.session_state.file_mode = True
+            st.session_state.file_text = file_text
+            st.sidebar.success("File loaded successfully!")
 
-gap_btn = st.sidebar.button("🔍 Detect Process Gaps")
-kpi_btn = st.sidebar.button("📊 Auto Extract KPIs")
-risk_btn = st.sidebar.button("⚠️ Detect Process Risks")
+        except Exception:
+            st.sidebar.error("File processing failed.")
 
 # =====================================
 # QUERY DETECTION
@@ -171,6 +180,9 @@ def is_celonis_query(prompt):
 # =====================================
 
 def exact_function_match(query):
+    if not metadata:
+        return None
+
     query_upper = query.upper()
     tokens = re.findall(r'\bPU_[A-Z_]+\b', query_upper)
 
@@ -183,12 +195,16 @@ def exact_function_match(query):
     return None
 
 # =====================================
-# SEMANTIC SEARCH
+# SEMANTIC SEARCH (SAFE)
 # =====================================
 
 def semantic_search(query, top_k=5):
+    if not index or not EMBED_MODEL:
+        return ""
+
     query_embedding = EMBED_MODEL.encode([query])
     D, I = index.search(np.array(query_embedding), top_k)
+
     return "\n\n".join([metadata[i]["text"] for i in I[0]])
 
 # =====================================
@@ -202,37 +218,20 @@ def retrieve_context(prompt):
     return semantic_search(prompt)
 
 # =====================================
-# ADVANCED INTELLIGENCE FUNCTIONS
+# SAFE LLM CALL
 # =====================================
 
-def run_analysis(prompt):
-    response = client.chat.completions.create(
-        model=MODEL_NAME,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.2,
-        max_tokens=1200
-    )
-    return response.choices[0].message.content
-
-if st.session_state.file_mode:
-
-    if gap_btn:
-        with st.spinner("Analyzing process gaps..."):
-            result = run_analysis(f"Detect process gaps:\n{st.session_state.file_text}")
-            st.markdown("## 🔍 Process Gap Analysis")
-            st.markdown(result)
-
-    if kpi_btn:
-        with st.spinner("Extracting KPIs..."):
-            result = run_analysis(f"Extract KPIs from:\n{st.session_state.file_text}")
-            st.markdown("## 📊 Auto KPI Extraction")
-            st.markdown(result)
-
-    if risk_btn:
-        with st.spinner("Detecting risks..."):
-            result = run_analysis(f"Detect risks from:\n{st.session_state.file_text}")
-            st.markdown("## ⚠️ Process Risk Analysis")
-            st.markdown(result)
+def call_llm(messages):
+    try:
+        response = client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=messages,
+            temperature=0.1,
+            max_tokens=1200
+        )
+        return response.choices[0].message.content
+    except Exception:
+        return "⚠️ AI service temporarily unavailable. Please try again."
 
 # =====================================
 # MAIN HEADER
@@ -273,6 +272,7 @@ Documentation Context:
 User Question:
 {prompt}
 """
+
     elif st.session_state.file_mode:
         final_prompt = f"""
 Answer based only on uploaded file content:
@@ -288,18 +288,12 @@ User Question:
     with st.chat_message("assistant"):
         with st.spinner("Analyzing..."):
 
-            response = client.chat.completions.create(
-                model=MODEL_NAME,
-                messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    *st.session_state.messages[:-1],
-                    {"role": "user", "content": final_prompt}
-                ],
-                temperature=0.1,
-                max_tokens=1500
-            )
+            reply = call_llm([
+                {"role": "system", "content": SYSTEM_PROMPT},
+                *st.session_state.messages[:-1],
+                {"role": "user", "content": final_prompt}
+            ])
 
-            reply = response.choices[0].message.content
             st.markdown(reply)
 
     st.session_state.messages.append({"role": "assistant", "content": reply})
