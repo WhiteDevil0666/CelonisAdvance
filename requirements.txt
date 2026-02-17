@@ -1,0 +1,12 @@
+streamlit
+groq
+pypdf
+sentence-transformers
+faiss-cpu
+numpy
+beautifulsoup4
+requests
+pandas
+openpyxl
+scikit-learn
+torch
