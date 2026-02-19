@@ -30,7 +30,6 @@ def set_background(image_file):
 
         st.markdown(f"""
         <style>
-
         .stApp {{
             background:
                 linear-gradient(rgba(0,0,0,0.85), rgba(0,0,0,0.85)),
@@ -39,49 +38,34 @@ def set_background(image_file):
             background-position: center;
             background-attachment: fixed;
         }}
-
         .block-container {{
             padding-top: 2rem;
             padding-bottom: 1rem;
         }}
-
         section[data-testid="stSidebar"] {{
             background-color: rgba(15,15,25,0.95);
         }}
-
         div[data-testid="stFileUploader"] {{
             background-color: rgba(30,30,45,0.9) !important;
             padding: 15px;
             border-radius: 10px;
         }}
-
         div[data-testid="stFileUploader"] * {{
             color: white !important;
         }}
-
-        div[data-testid="stFileUploader"] button {{
-            background-color: #ff7a00 !important;
-            color: white !important;
-            border-radius: 8px !important;
-        }}
-
         .stChatMessage {{
             background-color: rgba(20,20,30,0.85);
             border-radius: 12px;
             padding: 12px;
         }}
-
         h1, h2, h3 {{
             color: white !important;
         }}
-
         p {{
             color: #dddddd !important;
         }}
-
         </style>
         """, unsafe_allow_html=True)
-
     except:
         pass
 
@@ -101,7 +85,7 @@ def load_embedding_model():
 EMBED_MODEL = load_embedding_model()
 
 # =====================================
-# SYSTEM PROMPTS
+# SYSTEM PROMPT
 # =====================================
 
 SYSTEM_PROMPT = """
@@ -124,21 +108,6 @@ STRICT RULES:
 3. Only generate new PQL queries if explicitly requested.
 4. Never use SQL keywords.
 5. Priority: Technical Accuracy > Simplicity.
-"""
-
-# 🔥 NEW: KPI BUILDER PROMPT (ADDED)
-KPI_BUILDER_PROMPT = """
-You are a Celonis PQL KPI Builder Expert.
-
-Rules:
-1. Generate ONLY valid Celonis PQL.
-2. Never use SQL syntax.
-3. Use official PQL functions only.
-4. Return:
-   - KPI Name
-   - PQL Formula
-   - Short Explanation
-5. If business logic is unclear, ask clarification.
 """
 
 # =====================================
@@ -204,6 +173,82 @@ if uploaded_file:
         st.sidebar.error("File processing failed.")
 
 # =====================================
+# 🔥 ADVANCED PQL INTELLIGENCE ENGINE
+# =====================================
+
+def detect_sql_syntax(text):
+    sql_keywords = ["SELECT ", " FROM ", " GROUP BY ", " ORDER BY ", " WHERE "]
+    return any(keyword in text.upper() for keyword in sql_keywords)
+
+def validate_pql_syntax(pql_text):
+    if not re.search(r'\bPU_|SUM\(|COUNT\(|AVG\(', pql_text):
+        return False
+    if detect_sql_syntax(pql_text):
+        return False
+    return True
+
+def enforce_pu_usage(prompt, generated_pql):
+    dimension_keywords = ["vendor", "customer", "company", "plant", "region"]
+    if any(word in prompt.lower() for word in dimension_keywords):
+        if "PU_" not in generated_pql:
+            return False
+    return True
+
+def build_kpi_prompt(user_prompt):
+    return f"""
+You are building a Celonis KPI using PQL.
+
+STEP 1: Identify tables and aggregation level.
+STEP 2: Use PU functions if aggregation is at dimension level.
+STEP 3: Output ONLY valid PQL.
+No explanation.
+
+Business Question:
+{user_prompt}
+"""
+
+def generate_structured_pql(user_prompt):
+
+    structured_prompt = build_kpi_prompt(user_prompt)
+
+    response = client.chat.completions.create(
+        model=MODEL_NAME,
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": structured_prompt}
+        ],
+        temperature=0.1,
+        max_tokens=800
+    )
+
+    generated = response.choices[0].message.content
+
+    if not validate_pql_syntax(generated) or not enforce_pu_usage(user_prompt, generated):
+
+        correction_prompt = f"""
+Fix this PQL to follow Celonis rules.
+- No SQL
+- Must use PU functions if aggregating at dimension level
+
+Original:
+{generated}
+"""
+
+        correction_response = client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": correction_prompt}
+            ],
+            temperature=0.05,
+            max_tokens=800
+        )
+
+        return correction_response.choices[0].message.content
+
+    return generated
+
+# =====================================
 # QUERY DETECTION
 # =====================================
 
@@ -211,22 +256,8 @@ def is_celonis_query(prompt):
     keywords = ["celonis", "pql", "pu_", "datediff", "pull-up"]
     return any(word in prompt.lower() for word in keywords)
 
-# 🔥 NEW: KPI REQUEST DETECTION (ADDED)
-def is_kpi_request(prompt):
-    keywords = [
-        "kpi",
-        "build kpi",
-        "create kpi",
-        "generate kpi",
-        "write pql",
-        "custom formula",
-        "calculate",
-        "create query"
-    ]
-    return any(word in prompt.lower() for word in keywords)
-
 # =====================================
-# FUNCTION MATCH
+# EXACT FUNCTION MATCH
 # =====================================
 
 def exact_function_match(query):
@@ -257,10 +288,6 @@ def semantic_search(query, top_k=5):
 
     return "\n\n".join([metadata[i]["text"] for i in I[0]])
 
-# =====================================
-# CONTEXT RETRIEVAL
-# =====================================
-
 def retrieve_context(prompt):
     exact = exact_function_match(prompt)
     if exact:
@@ -268,7 +295,7 @@ def retrieve_context(prompt):
     return semantic_search(prompt)
 
 # =====================================
-# HEADER
+# MAIN HEADER
 # =====================================
 
 st.title("🧠 Process Mining Copilot (Celonis)")
@@ -293,19 +320,20 @@ if prompt := st.chat_input("Ask your question..."):
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # 🔥 KPI BUILDER MODE (FIRST PRIORITY)
-    if is_kpi_request(prompt):
+    # 🔥 KPI AUTO GENERATION
+    if any(word in prompt.lower() for word in ["ratio", "kpi", "calculate", "working capital", "cycle", "payment"]):
 
-        final_prompt = f"""
-{KPI_BUILDER_PROMPT}
+        with st.chat_message("assistant"):
+            with st.spinner("Building structured KPI logic..."):
+                pql_output = generate_structured_pql(prompt)
+                st.markdown("### 📊 Generated PQL KPI")
+                st.code(pql_output, language="sql")
 
-User Request:
-{prompt}
-"""
+        st.session_state.messages.append({
+            "role": "assistant",
+            "content": pql_output
+        })
 
-        system_used = KPI_BUILDER_PROMPT
-
-    # Celonis strict mode
     elif is_celonis_query(prompt) and metadata:
 
         context = retrieve_context(prompt)
@@ -322,42 +350,66 @@ User Question:
 {prompt}
 """
 
-        system_used = SYSTEM_PROMPT
+        with st.chat_message("assistant"):
+            with st.spinner("Analyzing..."):
+                response = client.chat.completions.create(
+                    model=MODEL_NAME,
+                    messages=[
+                        {"role": "system", "content": SYSTEM_PROMPT},
+                        *st.session_state.messages[:-1],
+                        {"role": "user", "content": final_prompt}
+                    ],
+                    temperature=0.1,
+                    max_tokens=1200
+                )
 
-    # File mode
+                reply = response.choices[0].message.content
+                st.markdown(reply)
+
+        st.session_state.messages.append({"role": "assistant", "content": reply})
+
     elif st.session_state.file_text:
 
         final_prompt = f"""
-Answer strictly using the uploaded process file content.
+Answer strictly using the uploaded file.
 
-File Content:
 {st.session_state.file_text}
 
 User Question:
 {prompt}
 """
 
-        system_used = SYSTEM_PROMPT
+        with st.chat_message("assistant"):
+            with st.spinner("Analyzing..."):
+                response = client.chat.completions.create(
+                    model=MODEL_NAME,
+                    messages=[
+                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "user", "content": final_prompt}
+                    ],
+                    temperature=0.1,
+                    max_tokens=1200
+                )
+
+                reply = response.choices[0].message.content
+                st.markdown(reply)
+
+        st.session_state.messages.append({"role": "assistant", "content": reply})
 
     else:
-        final_prompt = prompt
-        system_used = SYSTEM_PROMPT
+        with st.chat_message("assistant"):
+            with st.spinner("Analyzing..."):
+                response = client.chat.completions.create(
+                    model=MODEL_NAME,
+                    messages=[
+                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.2,
+                    max_tokens=1000
+                )
 
-    with st.chat_message("assistant"):
-        with st.spinner("Analyzing..."):
+                reply = response.choices[0].message.content
+                st.markdown(reply)
 
-            response = client.chat.completions.create(
-                model=MODEL_NAME,
-                messages=[
-                    {"role": "system", "content": system_used},
-                    *st.session_state.messages[:-1],
-                    {"role": "user", "content": final_prompt}
-                ],
-                temperature=0.1,
-                max_tokens=1200
-            )
-
-            reply = response.choices[0].message.content
-            st.markdown(reply)
-
-    st.session_state.messages.append({"role": "assistant", "content": reply})
+        st.session_state.messages.append({"role": "assistant", "content": reply})
