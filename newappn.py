@@ -85,7 +85,6 @@ def set_background(image_file):
     except:
         pass
 
-
 set_background("background.png")
 
 # =====================================
@@ -95,7 +94,6 @@ set_background("background.png")
 MODEL_NAME = "llama-3.1-8b-instant"
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
-# Lazy load embedding model to avoid crash
 @st.cache_resource
 def load_embedding_model():
     return SentenceTransformer("all-MiniLM-L6-v2")
@@ -103,7 +101,7 @@ def load_embedding_model():
 EMBED_MODEL = load_embedding_model()
 
 # =====================================
-# SYSTEM PROMPT
+# SYSTEM PROMPTS
 # =====================================
 
 SYSTEM_PROMPT = """
@@ -126,6 +124,21 @@ STRICT RULES:
 3. Only generate new PQL queries if explicitly requested.
 4. Never use SQL keywords.
 5. Priority: Technical Accuracy > Simplicity.
+"""
+
+# 🔥 NEW: KPI BUILDER PROMPT (ADDED)
+KPI_BUILDER_PROMPT = """
+You are a Celonis PQL KPI Builder Expert.
+
+Rules:
+1. Generate ONLY valid Celonis PQL.
+2. Never use SQL syntax.
+3. Use official PQL functions only.
+4. Return:
+   - KPI Name
+   - PQL Formula
+   - Short Explanation
+5. If business logic is unclear, ask clarification.
 """
 
 # =====================================
@@ -187,7 +200,7 @@ if uploaded_file:
         st.session_state.file_text = file_text[:15000]
         st.sidebar.success("File loaded successfully!")
 
-    except Exception as e:
+    except:
         st.sidebar.error("File processing failed.")
 
 # =====================================
@@ -196,6 +209,20 @@ if uploaded_file:
 
 def is_celonis_query(prompt):
     keywords = ["celonis", "pql", "pu_", "datediff", "pull-up"]
+    return any(word in prompt.lower() for word in keywords)
+
+# 🔥 NEW: KPI REQUEST DETECTION (ADDED)
+def is_kpi_request(prompt):
+    keywords = [
+        "kpi",
+        "build kpi",
+        "create kpi",
+        "generate kpi",
+        "write pql",
+        "custom formula",
+        "calculate",
+        "create query"
+    ]
     return any(word in prompt.lower() for word in keywords)
 
 # =====================================
@@ -266,8 +293,20 @@ if prompt := st.chat_input("Ask your question..."):
     with st.chat_message("user"):
         st.markdown(prompt)
 
+    # 🔥 KPI BUILDER MODE (FIRST PRIORITY)
+    if is_kpi_request(prompt):
+
+        final_prompt = f"""
+{KPI_BUILDER_PROMPT}
+
+User Request:
+{prompt}
+"""
+
+        system_used = KPI_BUILDER_PROMPT
+
     # Celonis strict mode
-    if is_celonis_query(prompt) and metadata:
+    elif is_celonis_query(prompt) and metadata:
 
         context = retrieve_context(prompt)
 
@@ -283,8 +322,11 @@ User Question:
 {prompt}
 """
 
+        system_used = SYSTEM_PROMPT
+
     # File mode
     elif st.session_state.file_text:
+
         final_prompt = f"""
 Answer strictly using the uploaded process file content.
 
@@ -295,8 +337,11 @@ User Question:
 {prompt}
 """
 
+        system_used = SYSTEM_PROMPT
+
     else:
         final_prompt = prompt
+        system_used = SYSTEM_PROMPT
 
     with st.chat_message("assistant"):
         with st.spinner("Analyzing..."):
@@ -304,7 +349,7 @@ User Question:
             response = client.chat.completions.create(
                 model=MODEL_NAME,
                 messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "system", "content": system_used},
                     *st.session_state.messages[:-1],
                     {"role": "user", "content": final_prompt}
                 ],
