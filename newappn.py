@@ -78,14 +78,12 @@ def set_background(image_file):
 set_background("background.png")
 
 # =====================================
-# CONFIGURATION
+# CONFIGURATION – 3 MODEL ARCHITECTURE
 # =====================================
 
-# 🔹 3 MODEL ARCHITECTURE
-
-MODEL_DOC = "llama-3.1-8b-instant"          # Documentation / Basic Q&A
-MODEL_REASONING = "openai/gpt-oss-120b"     # Deep business reasoning
-MODEL_PQL_ENGINE = "llama-3.3-70b-versatile" # Custom PQL builder
+MODEL_DOC = "llama-3.1-8b-instant"          # Documentation
+MODEL_REASONING = "openai/gpt-oss-120b"     # Deep reasoning
+MODEL_PQL_ENGINE = "llama-3.3-70b-versatile" # Strict PQL builder
 
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
@@ -106,24 +104,23 @@ STRICT RULES:
 
 1. For general Process Mining questions:
    - Provide structured explanation.
-   - Use simple real-world examples.
 
 2. For Celonis / PQL questions:
-   - STRICTLY use provided documentation context.
-   - Preserve official syntax EXACTLY.
-   - Do NOT convert PQL into SQL.
-   - Do NOT simplify syntax.
-   - Do NOT invent examples.
-   - If not found in documentation, say:
-     "Not found in official Celonis documentation."
+   - STRICTLY use Celonis PQL syntax.
+   - There is NO SELECT.
+   - There is NO FROM.
+   - There is NO JOIN.
+   - There is NO GROUP BY.
+   - There is NO WHERE.
+   - Only use PU functions and PQL expressions.
+   - Never convert PQL into SQL.
 
 3. Only generate new PQL queries if explicitly requested.
 4. Never use SQL keywords.
-5. Priority: Technical Accuracy > Simplicity.
 """
 
 # =====================================
-# LOAD VECTOR STORE (UNCHANGED)
+# LOAD VECTOR STORE
 # =====================================
 
 @st.cache_resource
@@ -139,26 +136,14 @@ def load_vector_store():
 index, metadata = load_vector_store()
 
 # =====================================
-# SESSION MEMORY (UNCHANGED)
+# SESSION MEMORY
 # =====================================
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
 # =====================================
-# QUERY DETECTION (UNCHANGED)
-# =====================================
-
-def is_celonis_query(prompt):
-    keywords = [
-        "celonis", "pql", "pu_", "datediff",
-        "process query language", "pull-up",
-        "throughput", "event log"
-    ]
-    return any(word in prompt.lower() for word in keywords)
-
-# =====================================
-# SMART QUERY CLASSIFIER (NEW – SAFE ADDITION)
+# QUERY CLASSIFIER
 # =====================================
 
 def classify_query(prompt):
@@ -171,17 +156,17 @@ def classify_query(prompt):
         "create query",
         "custom kpi",
         "calculate ratio",
-        "group by",
         "for each",
-        "working capital"
+        "sum",
+        "count",
+        "avg"
     ]):
         return "pql_generation"
 
     if any(word in prompt_lower for word in [
         "why",
-        "optimize",
-        "improve",
         "impact",
+        "optimize",
         "analysis",
         "root cause"
     ]):
@@ -190,10 +175,82 @@ def classify_query(prompt):
     return "documentation"
 
 # =====================================
-# EXACT FUNCTION MATCH (UNCHANGED)
+# STRICT SQL BLOCKER
+# =====================================
+
+SQL_BLOCK_LIST = ["SELECT", "FROM", "JOIN", "GROUP BY", "WHERE"]
+
+def contains_sql(text):
+    text_upper = text.upper()
+    return any(keyword in text_upper for keyword in SQL_BLOCK_LIST)
+
+# =====================================
+# STRICT PQL GENERATOR
+# =====================================
+
+def generate_strict_pql(prompt):
+
+    strict_prompt = f"""
+Convert the following business requirement into valid Celonis PQL.
+
+CRITICAL RULES:
+- Celonis PQL is NOT SQL.
+- No SELECT.
+- No FROM.
+- No GROUP BY.
+- No JOIN.
+- No WHERE.
+- Only use PU_SUM, PU_COUNT, PU_AVG, FILTER, column expressions.
+
+Business Requirement:
+{prompt}
+
+Return ONLY valid PQL.
+"""
+
+    response = client.chat.completions.create(
+        model=MODEL_PQL_ENGINE,
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": strict_prompt}
+        ],
+        temperature=0.0,
+        max_tokens=800
+    )
+
+    output = response.choices[0].message.content
+
+    # HARD SQL BLOCK
+    if contains_sql(output):
+        correction_prompt = f"""
+Your previous answer used SQL syntax.
+Rewrite strictly in Celonis PQL.
+No SQL allowed.
+
+Original:
+{output}
+"""
+        correction = client.chat.completions.create(
+            model=MODEL_PQL_ENGINE,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": correction_prompt}
+            ],
+            temperature=0.0,
+            max_tokens=800
+        )
+        return correction.choices[0].message.content
+
+    return output
+
+# =====================================
+# EXACT FUNCTION ROUTING
 # =====================================
 
 def exact_function_match(query):
+    if not metadata:
+        return None
+
     query_upper = query.upper()
     tokens = re.findall(r'\bPU_[A-Z_]+\b', query_upper)
 
@@ -202,45 +259,34 @@ def exact_function_match(query):
             url = item.get("url", "").lower()
             if token.lower() in url:
                 return item["text"]
-
     return None
 
 # =====================================
-# SEMANTIC SEARCH (UNCHANGED)
+# SEMANTIC SEARCH
 # =====================================
 
 def semantic_search(query, top_k=5):
     if not index:
         return ""
-
     query_embedding = EMBED_MODEL.encode([query])
     D, I = index.search(np.array(query_embedding), top_k)
-
-    results = []
-    for idx in I[0]:
-        results.append(metadata[idx]["text"])
-
-    return "\n\n".join(results)
-
-# =====================================
-# CONTEXT PIPELINE (UNCHANGED)
-# =====================================
+    return "\n\n".join([metadata[i]["text"] for i in I[0]])
 
 def retrieve_context(prompt):
-    exact_match = exact_function_match(prompt)
-    if exact_match:
-        return exact_match
+    exact = exact_function_match(prompt)
+    if exact:
+        return exact
     return semantic_search(prompt)
 
 # =====================================
-# UI HEADER (UNCHANGED)
+# UI HEADER
 # =====================================
 
-st.title("🧠 Process Mining Copilot(Celonis)")
+st.title("🧠 Process Mining Copilot (Celonis)")
 st.markdown("Powered by Divyansh")
 
 # =====================================
-# DISPLAY CHAT HISTORY (UNCHANGED)
+# DISPLAY CHAT
 # =====================================
 
 for message in st.session_state.messages:
@@ -248,7 +294,7 @@ for message in st.session_state.messages:
         st.markdown(message["content"])
 
 # =====================================
-# CHAT INPUT (UPDATED ONLY WITH ROUTING)
+# CHAT INPUT
 # =====================================
 
 if prompt := st.chat_input("Ask your question..."):
@@ -258,11 +304,28 @@ if prompt := st.chat_input("Ask your question..."):
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # 🔹 STRICT DOCUMENTATION CONTEXT
-    if is_celonis_query(prompt):
-        context = retrieve_context(prompt)
+    query_type = classify_query(prompt)
 
-        final_prompt = f"""
+    # 🔹 PQL GENERATION ROUTE
+    if query_type == "pql_generation":
+
+        pql_output = generate_strict_pql(prompt)
+
+        with st.chat_message("assistant"):
+            st.markdown("### 📊 Generated Celonis PQL")
+            st.code(pql_output, language="sql")
+
+        st.session_state.messages.append({
+            "role": "assistant",
+            "content": pql_output
+        })
+
+    else:
+
+        # Documentation context if needed
+        if "pql" in prompt.lower():
+            context = retrieve_context(prompt)
+            final_prompt = f"""
 STRICT MODE ENABLED.
 
 Documentation Context:
@@ -273,36 +336,29 @@ Documentation Context:
 User Question:
 {prompt}
 """
-    else:
-        final_prompt = prompt
+        else:
+            final_prompt = prompt
 
-    # 🔹 MODEL ROUTING
-    query_type = classify_query(prompt)
+        # Model selection
+        if query_type == "reasoning":
+            selected_model = MODEL_REASONING
+        else:
+            selected_model = MODEL_DOC
 
-    if query_type == "documentation":
-        selected_model = MODEL_DOC
-    elif query_type == "reasoning":
-        selected_model = MODEL_REASONING
-    elif query_type == "pql_generation":
-        selected_model = MODEL_PQL_ENGINE
-    else:
-        selected_model = MODEL_DOC
+        with st.chat_message("assistant"):
+            with st.spinner("Analyzing..."):
+                response = client.chat.completions.create(
+                    model=selected_model,
+                    messages=[
+                        {"role": "system", "content": SYSTEM_PROMPT},
+                        *st.session_state.messages[:-1],
+                        {"role": "user", "content": final_prompt}
+                    ],
+                    temperature=0.1,
+                    max_tokens=1500
+                )
 
-    with st.chat_message("assistant"):
-        with st.spinner("Analyzing..."):
+                reply = response.choices[0].message.content
+                st.markdown(reply)
 
-            response = client.chat.completions.create(
-                model=selected_model,
-                messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    *st.session_state.messages[:-1],
-                    {"role": "user", "content": final_prompt}
-                ],
-                temperature=0.1,
-                max_tokens=1500
-            )
-
-            reply = response.choices[0].message.content
-            st.markdown(reply)
-
-    st.session_state.messages.append({"role": "assistant", "content": reply})
+        st.session_state.messages.append({"role": "assistant", "content": reply})
