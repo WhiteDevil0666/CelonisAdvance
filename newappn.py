@@ -81,11 +81,12 @@ set_background("background.png")
 # CONFIGURATION
 # =====================================
 
-# 🔹 3 MODEL ARCHITECTURE
+MODEL_DOC = "llama-3.1-8b-instant"
+MODEL_REASONING = "openai/gpt-oss-120b"
+MODEL_PQL_ENGINE = "llama-3.3-70b-versatile"
 
-MODEL_DOC = "llama-3.1-8b-instant"          # Documentation / Basic Q&A
-MODEL_REASONING = "openai/gpt-oss-120b"     # Deep business reasoning
-MODEL_PQL_ENGINE = "llama-3.3-70b-versatile" # Custom PQL builder
+# 🔥 NEW GUARDRAIL MODEL ADDED
+MODEL_GUARDRAIL = "qwen/qwen3-32b"
 
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
@@ -94,6 +95,54 @@ def load_embedding_model():
     return SentenceTransformer("all-MiniLM-L6-v2")
 
 EMBED_MODEL = load_embedding_model()
+
+# =====================================
+# 🔥 EXECUTION GUARDRAIL FUNCTION ADDED
+# =====================================
+
+def validate_pql(query):
+
+    guardrail_prompt = f"""
+You are validating Celonis PQL.
+
+Reject if query contains SQL:
+SELECT, FROM, GROUP BY, HAVING, JOIN, WHERE
+
+Reject standalone ORDER BY
+
+Reject activity-level aggregation:
+AVG("ACTIVITY_TABLE"."COLUMN")
+
+Require PU_* if cross-table.
+
+Reject modelling operators:
+CREATE_EVENTLOG
+MERGE_EVENTLOG
+AUTOMERGE
+TRANSIT_COLUMN
+
+Reject ML operators:
+KMEANS
+CLUSTER_VARIANTS
+LINEAR_REGRESSION
+
+If invalid:
+Explain why and correct it.
+
+Return only corrected valid PQL.
+
+Query:
+{query}
+"""
+
+    validation = client.chat.completions.create(
+        model=MODEL_GUARDRAIL,
+        messages=[{"role":"user","content":guardrail_prompt}],
+        temperature=0,
+        max_tokens=800
+    )
+
+    return validation.choices[0].message.content
 
 # =====================================
 # SYSTEM PROMPT (UNCHANGED)
@@ -158,7 +207,7 @@ def is_celonis_query(prompt):
     return any(word in prompt.lower() for word in keywords)
 
 # =====================================
-# SMART QUERY CLASSIFIER (NEW – SAFE ADDITION)
+# SMART QUERY CLASSIFIER (UNCHANGED)
 # =====================================
 
 def classify_query(prompt):
@@ -248,7 +297,7 @@ for message in st.session_state.messages:
         st.markdown(message["content"])
 
 # =====================================
-# CHAT INPUT (UPDATED ONLY WITH ROUTING)
+# CHAT INPUT (ONLY GUARDRAIL ADDED)
 # =====================================
 
 if prompt := st.chat_input("Ask your question..."):
@@ -258,7 +307,6 @@ if prompt := st.chat_input("Ask your question..."):
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # 🔹 STRICT DOCUMENTATION CONTEXT
     if is_celonis_query(prompt):
         context = retrieve_context(prompt)
 
@@ -276,7 +324,6 @@ User Question:
     else:
         final_prompt = prompt
 
-    # 🔹 MODEL ROUTING
     query_type = classify_query(prompt)
 
     if query_type == "documentation":
@@ -303,6 +350,11 @@ User Question:
             )
 
             reply = response.choices[0].message.content
+
+            # 🔥 EXECUTION GUARDRAIL
+            if query_type == "pql_generation":
+                reply = validate_pql(reply)
+
             st.markdown(reply)
 
     st.session_state.messages.append({"role": "assistant", "content": reply})
