@@ -25,35 +25,24 @@ def set_background(image_file):
         with open(image_file, "rb") as f:
             encoded = base64.b64encode(f.read()).decode()
 
-        st.markdown(f"""
         page_bg = f"""
         <style>
         .stApp {{
             background:
-@@ -38,34 +36,42 @@ def set_background(image_file):
+                linear-gradient(rgba(0,0,0,0.85), rgba(0,0,0,0.85)),
+                url("data:image/png;base64,{encoded}");
+            background-size: cover;
             background-position: center;
             background-attachment: fixed;
         }}
-        .block-container {{
-            padding-top: 2rem;
-            padding-bottom: 1rem;
-        }}
-        section[data-testid="stSidebar"] {{
-            background-color: rgba(15,15,25,0.95);
 
         .main {{
             background-color: transparent !important;
         }}
-        div[data-testid="stFileUploader"] {{
-            background-color: rgba(30,30,45,0.9) !important;
-            padding: 15px;
-            border-radius: 10px;
 
         section.main > div {{
             background-color: transparent !important;
         }}
-        div[data-testid="stFileUploader"] * {{
-            color: white !important;
 
         .block-container {{
             padding-top: 2rem;
@@ -61,21 +50,16 @@ def set_background(image_file):
         }}
 
         .stChatMessage {{
-            background-color: rgba(20,20,30,0.85);
             background-color: rgba(20, 20, 30, 0.85);
             border-radius: 12px;
             padding: 12px;
         }}
-        h1, h2, h3 {{
-            color: white !important;
 
         div[data-testid="stChatInput"] {{
             background-color: rgba(20, 20, 30, 0.95);
             border-radius: 12px;
             padding: 8px;
         }}
-        p {{
-            color: #dddddd !important;
 
         section[data-testid="stSidebar"] {{
             background-color: rgba(15, 15, 25, 0.95);
@@ -85,11 +69,13 @@ def set_background(image_file):
             color: white !important;
         }}
         </style>
-        """, unsafe_allow_html=True)
         """
+
         st.markdown(page_bg, unsafe_allow_html=True)
+
     except:
         pass
+
 
 @@ -75,7 +81,12 @@ def set_background(image_file):
 # CONFIGURATION
@@ -500,3 +486,4 @@ User Question:
             st.markdown(reply)
 
     st.session_state.messages.append({"role": "assistant", "content": reply})
+
