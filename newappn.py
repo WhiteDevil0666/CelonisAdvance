@@ -18,7 +18,7 @@ st.set_page_config(
 )
 
 # =====================================
-# BACKGROUND SETUP
+# BACKGROUND
 # =====================================
 
 def set_background(image_file):
@@ -26,7 +26,7 @@ def set_background(image_file):
         with open(image_file, "rb") as f:
             encoded = base64.b64encode(f.read()).decode()
 
-        page_bg = f"""
+        st.markdown(f"""
         <style>
         .stApp {{
             background:
@@ -36,54 +36,35 @@ def set_background(image_file):
             background-position: center;
             background-attachment: fixed;
         }}
-
-        .main {{
-            background-color: transparent !important;
-        }}
-
-        section.main > div {{
-            background-color: transparent !important;
-        }}
-
         .block-container {{
             padding-top: 2rem;
             padding-bottom: 0rem;
         }}
-
         .stChatMessage {{
-            background-color: rgba(20, 20, 30, 0.85);
+            background-color: rgba(20,20,30,0.85);
             border-radius: 12px;
             padding: 12px;
         }}
-
-        div[data-testid="stChatInput"] {{
-            background-color: rgba(20, 20, 30, 0.95);
-            border-radius: 12px;
-            padding: 8px;
-        }}
-
         section[data-testid="stSidebar"] {{
-            background-color: rgba(15, 15, 25, 0.95);
+            background-color: rgba(15,15,25,0.95);
         }}
-
-        h1, h2, h3, p, div, span {{
+        h1,h2,h3,p,div,span {{
             color: white !important;
         }}
         </style>
-        """
-        st.markdown(page_bg, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
     except:
         pass
 
 set_background("background.png")
 
 # =====================================
-# CONFIGURATION – 3 MODEL ARCHITECTURE
+# MODELS
 # =====================================
 
-MODEL_DOC = "llama-3.1-8b-instant"          # Documentation
-MODEL_REASONING = "openai/gpt-oss-120b"     # Deep reasoning
-MODEL_PQL_ENGINE = "llama-3.3-70b-versatile" # Strict PQL builder
+MODEL_DOC = "llama-3.1-8b-instant"
+MODEL_REASONING = "openai/gpt-oss-120b"
+MODEL_PQL = "llama-3.3-70b-versatile"
 
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
@@ -94,29 +75,18 @@ def load_embedding_model():
 EMBED_MODEL = load_embedding_model()
 
 # =====================================
-# SYSTEM PROMPT (UNCHANGED)
+# SYSTEM PROMPT
 # =====================================
 
 SYSTEM_PROMPT = """
 You are a Senior Celonis Process Mining Consultant AI.
 
-STRICT RULES:
-
-1. For general Process Mining questions:
-   - Provide structured explanation.
-
-2. For Celonis / PQL questions:
-   - STRICTLY use Celonis PQL syntax.
-   - There is NO SELECT.
-   - There is NO FROM.
-   - There is NO JOIN.
-   - There is NO GROUP BY.
-   - There is NO WHERE.
-   - Only use PU functions and PQL expressions.
-   - Never convert PQL into SQL.
-
-3. Only generate new PQL queries if explicitly requested.
-4. Never use SQL keywords.
+CRITICAL PQL RULES:
+- Celonis PQL is NOT SQL.
+- Never use SELECT, FROM, JOIN, GROUP BY, WHERE.
+- Aggregations at dimension level must use PU functions.
+- If user says "for each", you must use PU_* with target table.
+- Do not manually exclude dimensions unless explicitly required.
 """
 
 # =====================================
@@ -136,7 +106,7 @@ def load_vector_store():
 index, metadata = load_vector_store()
 
 # =====================================
-# SESSION MEMORY
+# SESSION
 # =====================================
 
 if "messages" not in st.session_state:
@@ -147,69 +117,75 @@ if "messages" not in st.session_state:
 # =====================================
 
 def classify_query(prompt):
-    prompt_lower = prompt.lower()
+    lower = prompt.lower()
 
-    if any(word in prompt_lower for word in [
-        "build pql",
-        "write pql",
-        "generate pql",
-        "create query",
-        "custom kpi",
-        "calculate ratio",
-        "for each",
+    if any(word in lower for word in [
+        "calculate",
+        "build",
+        "write",
+        "generate",
+        "ratio",
         "sum",
         "count",
-        "avg"
+        "avg",
+        "for each"
     ]):
-        return "pql_generation"
+        return "pql"
 
-    if any(word in prompt_lower for word in [
+    if any(word in lower for word in [
         "why",
         "impact",
-        "optimize",
         "analysis",
-        "root cause"
+        "optimize"
     ]):
         return "reasoning"
 
     return "documentation"
 
 # =====================================
-# STRICT SQL BLOCKER
+# VALIDATION ENGINES
 # =====================================
 
-SQL_BLOCK_LIST = ["SELECT", "FROM", "JOIN", "GROUP BY", "WHERE"]
+SQL_KEYWORDS = ["SELECT", "FROM", "JOIN", "GROUP BY", "WHERE"]
 
 def contains_sql(text):
-    text_upper = text.upper()
-    return any(keyword in text_upper for keyword in SQL_BLOCK_LIST)
+    return any(k in text.upper() for k in SQL_KEYWORDS)
+
+def missing_pu_target(text):
+    """
+    Detect if PU function is missing target table.
+    """
+    return re.search(r'PU_\w+\(\s*"[A-Za-z0-9_]+"\s*\)', text) is None
+
+def illegal_dimension_filter(text):
+    """
+    Prevent manual dimension exclusion.
+    """
+    return "!=" in text and "companycode" in text.lower()
 
 # =====================================
 # STRICT PQL GENERATOR
 # =====================================
 
-def generate_strict_pql(prompt):
+def generate_pql(prompt):
 
     strict_prompt = f"""
-Convert the following business requirement into valid Celonis PQL.
+Convert the following requirement into VALID Celonis PQL.
 
-CRITICAL RULES:
-- Celonis PQL is NOT SQL.
-- No SELECT.
-- No FROM.
-- No GROUP BY.
-- No JOIN.
-- No WHERE.
-- Only use PU_SUM, PU_COUNT, PU_AVG, FILTER, column expressions.
+IMPORTANT:
+- If requirement contains "for each", use PU functions.
+- Syntax must be: PU_SUM( target_table , source_table.column , filter )
+- Do NOT exclude dimension manually unless explicitly asked.
+- No SQL allowed.
 
-Business Requirement:
+Requirement:
 {prompt}
 
-Return ONLY valid PQL.
+Return ONLY valid Celonis PQL.
 """
 
     response = client.chat.completions.create(
-        model=MODEL_PQL_ENGINE,
+        model=MODEL_PQL,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": strict_prompt}
@@ -220,18 +196,23 @@ Return ONLY valid PQL.
 
     output = response.choices[0].message.content
 
-    # HARD SQL BLOCK
-    if contains_sql(output):
+    # HARD FIX LOOP
+    if contains_sql(output) or illegal_dimension_filter(output):
+
         correction_prompt = f"""
-Your previous answer used SQL syntax.
-Rewrite strictly in Celonis PQL.
-No SQL allowed.
+Your previous answer violated Celonis rules.
+Fix it.
+
+- No SQL.
+- No manual dimension exclusion.
+- Use proper PU syntax with target table.
 
 Original:
 {output}
 """
+
         correction = client.chat.completions.create(
-            model=MODEL_PQL_ENGINE,
+            model=MODEL_PQL,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": correction_prompt}
@@ -239,31 +220,25 @@ Original:
             temperature=0.0,
             max_tokens=800
         )
+
         return correction.choices[0].message.content
 
     return output
 
 # =====================================
-# EXACT FUNCTION ROUTING
+# DOCUMENTATION SEARCH
 # =====================================
 
 def exact_function_match(query):
     if not metadata:
         return None
 
-    query_upper = query.upper()
-    tokens = re.findall(r'\bPU_[A-Z_]+\b', query_upper)
-
+    tokens = re.findall(r'\bPU_[A-Z_]+\b', query.upper())
     for token in tokens:
         for item in metadata:
-            url = item.get("url", "").lower()
-            if token.lower() in url:
+            if token.lower() in item.get("url", "").lower():
                 return item["text"]
     return None
-
-# =====================================
-# SEMANTIC SEARCH
-# =====================================
 
 def semantic_search(query, top_k=5):
     if not index:
@@ -306,10 +281,13 @@ if prompt := st.chat_input("Ask your question..."):
 
     query_type = classify_query(prompt)
 
-    # 🔹 PQL GENERATION ROUTE
-    if query_type == "pql_generation":
+    # ===============================
+    # 🔥 PQL GENERATION ROUTE
+    # ===============================
 
-        pql_output = generate_strict_pql(prompt)
+    if query_type == "pql":
+
+        pql_output = generate_pql(prompt)
 
         with st.chat_message("assistant"):
             st.markdown("### 📊 Generated Celonis PQL")
@@ -320,18 +298,17 @@ if prompt := st.chat_input("Ask your question..."):
             "content": pql_output
         })
 
+    # ===============================
+    # 🔍 DOCUMENTATION / REASONING
+    # ===============================
+
     else:
 
-        # Documentation context if needed
         if "pql" in prompt.lower():
             context = retrieve_context(prompt)
             final_prompt = f"""
-STRICT MODE ENABLED.
-
 Documentation Context:
------------------------
 {context}
------------------------
 
 User Question:
 {prompt}
@@ -339,11 +316,7 @@ User Question:
         else:
             final_prompt = prompt
 
-        # Model selection
-        if query_type == "reasoning":
-            selected_model = MODEL_REASONING
-        else:
-            selected_model = MODEL_DOC
+        selected_model = MODEL_REASONING if query_type == "reasoning" else MODEL_DOC
 
         with st.chat_message("assistant"):
             with st.spinner("Analyzing..."):
