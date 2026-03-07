@@ -21,7 +21,7 @@ st.set_page_config(
 )
 
 # ════════════════════════════════════════════════════════════
-# BACKGROUND + FULL CSS (all white areas fixed)
+# BACKGROUND + FULL DARK CSS
 # ════════════════════════════════════════════════════════════
 
 def set_background(image_file):
@@ -211,73 +211,42 @@ MODEL_NAME  = "llama-3.3-70b-versatile"
 client      = Groq(api_key=st.secrets["GROQ_API_KEY"])
 EMBED_MODEL = SentenceTransformer("all-MiniLM-L6-v2")
 
-VALID_PQL_FUNCTIONS = [
-    "PU_COUNT", "PU_SUM", "PU_AVG", "PU_MIN", "PU_MAX",
-    "PU_FIRST", "PU_LAST", "PU_MEDIAN", "PU_MODE", "PU_STDEV",
-    "PU_COUNT_DISTINCT", "PU_STRING_AGG", "PU_TRIMMED_MEAN",
-    "PU_PRODUCT", "PU_QUANTILE",
-    "DATEDIFF", "RUNNING_SUM", "RUNNING_TOTAL",
-    "ACTIVATION_COUNT", "SOURCE", "TARGET",
-    "CALC_THROUGHPUT", "CALC_REWORK",
-    "MOVING_AVG", "MOVING_SUM", "MOVING_COUNT",
-    "MOVING_MAX", "MOVING_MIN",
-    "WINDOW_AVG", "INTERPOLATE",
-    "CASE WHEN", "COALESCE", "ISNULL",
-    "MATCH_PROCESS", "MATCH_ACTIVITIES", "VARIANT",
-    "INDEX_ACTIVITY_ORDER", "INDEX_ACTIVITY_TYPE",
-    "LAG", "LEAD", "ACTIVITY_LAG", "ACTIVITY_LEAD",
-]
-
 # ════════════════════════════════════════════════════════════
 # SYSTEM PROMPT
 # ════════════════════════════════════════════════════════════
 
 SYSTEM_PROMPT = """
-You are a Senior Celonis Process Mining Consultant AI with deep expertise in PQL.
-You have a knowledge base of 195+ PQL functions with real solved examples.
+You are a Senior Celonis Process Mining Consultant specialised in PQL.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-HOW TO ANSWER EVERY QUERY
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Never generate SQL. Always follow Celonis PQL syntax.
 
-Step 1 — Understand the process mining task.
-Step 2 — Identify which PQL function(s) are needed.
-Step 3 — Study the Knowledge Base examples in context.
-Step 4 — Write syntactically correct, adapted PQL.
-Step 5 — Explain it clearly, line by line.
+Column format: "TABLE"."COLUMN"
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-STRICT PQL RULES
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Pull-up syntax:
+PU_FUNCTION(
+    DOMAIN_TABLE("TABLE"),
+    "TABLE"."COLUMN"
+)
 
-✅ Column reference:   "TABLE"."COLUMN"
-✅ Pull-Up syntax:     PU_FUNCTION ( DOMAIN_TABLE ( "TABLE" ), "TABLE"."COL", FILTER ... )
-✅ Date diff:          DATEDIFF ( 'day', "TABLE"."START", "TABLE"."END" )
-✅ Case expression:    CASE WHEN condition THEN value ELSE other END
-✅ Filter inside PU_:  FILTER "TABLE"."COL" = 'value'
-✅ Source / Target:    SOURCE ( "TABLE"."ACTIVITY", EXCLUDE DUPLICATE ACTIVITIES )
-✅ Running agg:        RUNNING_SUM ( "TABLE"."COLUMN" )
-✅ Rework check:       ACTIVATION_COUNT ( "TABLE"."ACTIVITY" ) > 1
+Rules:
+- Use FILTER inside PU_ functions when filtering is needed
+- Use DATEDIFF for date calculations
+- Use ACTIVATION_COUNT for rework detection
+- Use SOURCE / TARGET for process flow filtering
+- Use CASE WHEN for conditional logic
 
-❌ Never use SQL: SELECT, FROM, WHERE, GROUP BY, JOIN
-❌ Never invent function names
-❌ If user gave real names, use them exactly
-❌ If no names given, use: <CASE_TABLE>, <EVENT_TABLE>, <ACTIVITY_COL>, <VALUE_COL>
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-OUTPUT FORMAT — ALWAYS USE THIS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Output format:
 
 **📌 PQL Query:**
 ```
-<properly indented PQL>
+<query here>
 ```
 
-**📖 What this does:**
-<plain English, line-by-line explanation>
+**📖 Explanation:**
+Explain step by step.
 
 **💡 Note:**
-<tips, what to replace, edge cases>
+Tips or what to replace.
 """
 
 # ════════════════════════════════════════════════════════════
@@ -287,25 +256,25 @@ OUTPUT FORMAT — ALWAYS USE THIS
 VALIDATOR_PROMPT = """
 You are a strict Celonis PQL syntax validator.
 
-Check the given PQL for:
+Check for:
   • Missing or extra commas
   • Wrong FILTER syntax
   • Invalid DOMAIN_TABLE usage
   • SQL keywords (SELECT, FROM, WHERE, GROUP BY, JOIN)
   • Wrong column format (must be "TABLE"."COLUMN")
-  • Invented or invalid function names
+  • Invalid or invented function names
 
-Respond ONLY in this exact format:
+Respond ONLY in this format:
 
 **✅ Validation Status:** <PASSED or ISSUES FOUND>
 
 **🔧 Corrected PQL Query:**
 ```
-<corrected query, or original if no issues>
+<corrected query or original if clean>
 ```
 
 **📝 Notes:**
-<list each fix made, or "No issues found." if clean>
+<list each fix, or "No issues found.">
 """
 
 # ════════════════════════════════════════════════════════════
@@ -315,13 +284,10 @@ Respond ONLY in this exact format:
 @st.cache_resource
 def load_vector_store():
     try:
-        index = faiss.read_index("pql_knowledge.index")
-
-        with open("pql_knowledge.pkl", "rb") as f:
+        index = faiss.read_index("pql_faiss.index")
+        with open("pql_metadata.pkl", "rb") as f:
             metadata = pickle.load(f)
-
         return index, metadata
-
     except Exception as e:
         st.warning(f"⚠️ Knowledge base not found ({e}). Running in LLM-only mode.")
         return None, []
@@ -336,220 +302,71 @@ vector_index, vector_metadata = load_vector_store()
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-if "mode" not in st.session_state:
-    st.session_state.mode = "Auto"
-
 if "validate" not in st.session_state:
     st.session_state.validate = True
 
 # ════════════════════════════════════════════════════════════
-# INTENT DETECTION
+# SAFE METADATA NORMALISER
 # ════════════════════════════════════════════════════════════
 
-def detect_intent(prompt: str) -> str:
-    p = prompt.lower()
-    write_kw = [
-        "write", "generate", "create", "build", "give me", "make a",
-        "query for", "pql for", "calculate", "compute", "show query",
-        "can you write", "can you create", "help me write", "i need a query",
-        "i want a query", "example query", "how would i", "how to write",
-        "how do i write", "need pql",
-    ]
-    pql_kw = [
-        "celonis", "pql", "pu_", "datediff", "pull-up", "throughput",
-        "event log", "case duration", "activity", "variant", "kpi",
-        "filter", "domain_table", "rework", "bottleneck", "cycle time",
-        "lead time", "source", "target", "running_sum", "activation_count",
-        "process mining", "process query", "avg", "count", "sum",
-        "max", "min", "median", "moving", "window", "interpolate",
-        "calc_throughput", "calc_rework", "timestamp", "first activity",
-        "last activity", "index", "lag", "lead", "variant",
-    ]
-    is_write = any(w in p for w in write_kw)
-    is_pql   = any(w in p for w in pql_kw)
-
-    if is_write and is_pql:
-        return "write_pql"
-    elif is_pql:
-        return "explain_pql"
-    else:
-        return "general"
+def normalize_metadata(item):
+    if isinstance(item, dict):
+        return item
+    return {
+        "function": "PQL",
+        "question": "Example",
+        "answer":   str(item)
+    }
 
 # ════════════════════════════════════════════════════════════
-# PATTERN ENGINE — instant templates for common problems
+# EXACT FUNCTION MATCH
 # ════════════════════════════════════════════════════════════
 
-PATTERN_TEMPLATES = {
-    "throughput": {
-        "label": "⏱ Throughput / Duration",
-        "query": (
-            'DATEDIFF(\n'
-            "    'day',\n"
-            '    PU_MIN(\n'
-            '        DOMAIN_TABLE("<CASE_TABLE>"),\n'
-            '        "<EVENT_TABLE>"."TIMESTAMP"\n'
-            '    ),\n'
-            '    PU_MAX(\n'
-            '        DOMAIN_TABLE("<CASE_TABLE>"),\n'
-            '        "<EVENT_TABLE>"."TIMESTAMP"\n'
-            '    )\n'
-            ')'
-        ),
-    },
-    "rework": {
-        "label": "🔁 Rework Detection",
-        "query": (
-            'ACTIVATION_COUNT(\n'
-            '    "<EVENT_TABLE>"."ACTIVITY"\n'
-            ') > 1'
-        ),
-    },
-    "avg": {
-        "label": "📊 Average per Case",
-        "query": (
-            'PU_AVG(\n'
-            '    DOMAIN_TABLE("<CASE_TABLE>"),\n'
-            '    "<EVENT_TABLE>"."<VALUE_COL>"\n'
-            ')'
-        ),
-    },
-    "sum": {
-        "label": "➕ Sum per Case",
-        "query": (
-            'PU_SUM(\n'
-            '    DOMAIN_TABLE("<CASE_TABLE>"),\n'
-            '    "<EVENT_TABLE>"."<VALUE_COL>"\n'
-            ')'
-        ),
-    },
-    "count": {
-        "label": "🔢 Count Events per Case",
-        "query": (
-            'PU_COUNT(\n'
-            '    DOMAIN_TABLE("<CASE_TABLE>"),\n'
-            '    "<EVENT_TABLE>"."<EVENT_ID_COL>"\n'
-            ')'
-        ),
-    },
-    "min_value": {
-        "label": "🔽 Minimum Value",
-        "query": (
-            'PU_MIN(\n'
-            '    DOMAIN_TABLE("<CASE_TABLE>"),\n'
-            '    "<EVENT_TABLE>"."<VALUE_COL>"\n'
-            ')'
-        ),
-    },
-    "first_activity": {
-        "label": "🥇 First Activity",
-        "query": (
-            'PU_FIRST(\n'
-            '    DOMAIN_TABLE("<CASE_TABLE>"),\n'
-            '    "<EVENT_TABLE>"."ACTIVITY",\n'
-            '    ORDER BY "<EVENT_TABLE>"."TIMESTAMP" ASC\n'
-            ')'
-        ),
-    },
-    "last_activity": {
-        "label": "🏁 Last Activity",
-        "query": (
-            'PU_LAST(\n'
-            '    DOMAIN_TABLE("<CASE_TABLE>"),\n'
-            '    "<EVENT_TABLE>"."ACTIVITY",\n'
-            '    ORDER BY "<EVENT_TABLE>"."TIMESTAMP" ASC\n'
-            ')'
-        ),
-    },
-    "case_when": {
-        "label": "🏷 Classify with CASE WHEN",
-        "query": (
-            'CASE\n'
-            "    WHEN DATEDIFF('day', \"<CASE_TABLE>\".\"START\", \"<CASE_TABLE>\".\"END\") <= 5\n"
-            "        THEN 'Fast'\n"
-            "    WHEN DATEDIFF('day', \"<CASE_TABLE>\".\"START\", \"<CASE_TABLE>\".\"END\") <= 15\n"
-            "        THEN 'Medium'\n"
-            "    ELSE 'Slow'\n"
-            'END'
-        ),
-    },
-    "running_sum": {
-        "label": "📈 Running Sum",
-        "query": (
-            'RUNNING_SUM(\n'
-            '    "<EVENT_TABLE>"."<VALUE_COL>"\n'
-            ')'
-        ),
-    },
-    "filter": {
-        "label": "🔍 Filtered Aggregation",
-        "query": (
-            'PU_COUNT(\n'
-            '    DOMAIN_TABLE("<CASE_TABLE>"),\n'
-            '    "<EVENT_TABLE>"."<EVENT_ID_COL>",\n'
-            "    FILTER \"<EVENT_TABLE>\".\"ACTIVITY\" = '<ACTIVITY_NAME>'\n"
-            ')'
-        ),
-    },
-}
-
-
-def detect_problem(prompt: str) -> str | None:
-    p = prompt.lower()
-    if any(w in p for w in ["throughput", "time between", "cycle time", "lead time", "duration", "case duration"]):
-        return "throughput"
-    if "rework" in p or "repeated" in p or "loop" in p:
-        return "rework"
-    if any(w in p for w in ["running sum", "running total", "cumulative"]):
-        return "running_sum"
-    if any(w in p for w in ["first activity", "first event", "first step"]):
-        return "first_activity"
-    if any(w in p for w in ["last activity", "last event", "last step", "current status"]):
-        return "last_activity"
-    if any(w in p for w in ["classify", "classification", "categorize", "label", "case when"]):
-        return "case_when"
-    if any(w in p for w in ["smallest", "minimum value", "min value"]):
-        return "min_value"
-    if any(w in p for w in ["only for", "where activity", "filter by"]):
-        return "filter"
-    if any(w in p for w in ["total", "sum"]):
-        return "sum"
-    if any(w in p for w in ["average", "avg", "mean"]):
-        return "avg"
-    if "count" in p:
-        return "count"
-    return None
-
-# ════════════════════════════════════════════════════════════
-# RETRIEVAL — exact match + semantic search
-# ════════════════════════════════════════════════════════════
-
-def exact_function_match(query: str) -> list:
+def exact_function_match(query):
     if not vector_metadata:
         return []
-    q_upper = query.upper()
-    matches, seen = [], set()
-    for item in vector_metadata:
+
+    q       = query.upper()
+    results = []
+    seen    = set()
+
+    for raw in vector_metadata:
+        item = normalize_metadata(raw)
         func = item.get("function", "").upper()
-        if func and func in q_upper and func not in seen:
-            matches.append(item)
+        if func and func in q and func not in seen:
+            results.append(item)
             seen.add(func)
-    return matches
 
+    return results
 
-def semantic_search(query: str, top_k: int = 6) -> list:
+# ════════════════════════════════════════════════════════════
+# SEMANTIC SEARCH
+# ════════════════════════════════════════════════════════════
+
+def semantic_search(query, top_k=6):
     if vector_index is None or not vector_metadata:
         return []
+
     emb = EMBED_MODEL.encode([query])
     emb = np.array(emb, dtype="float32")
     faiss.normalize_L2(emb)
+
     _, I = vector_index.search(emb, top_k)
-    return [vector_metadata[i] for i in I[0] if i < len(vector_metadata)]
 
+    results = []
+    for idx in I[0]:
+        if idx < len(vector_metadata):
+            results.append(normalize_metadata(vector_metadata[idx]))
 
-def search_examples(query: str, top_k: int = 6) -> str:
-    """Used for direct context retrieval (returns formatted string)."""
-    exact    = exact_function_match(query)
-    semantic = semantic_search(query, top_k=top_k)
+    return results
+
+# ════════════════════════════════════════════════════════════
+# CONTEXT BUILDER
+# ════════════════════════════════════════════════════════════
+
+def retrieve_context(prompt):
+    exact    = exact_function_match(prompt)
+    semantic = semantic_search(prompt)
 
     seen, combined = set(), []
     for item in exact + semantic:
@@ -568,65 +385,156 @@ def search_examples(query: str, top_k: int = 6) -> str:
             f"Example Question: {item.get('question', '')}\n"
             f"PQL Answer:\n{item.get('answer', '')}"
         )
+
     return ("\n\n" + "─" * 50 + "\n\n").join(blocks)
 
 # ════════════════════════════════════════════════════════════
-# BUILD FINAL PROMPT
+# PATTERN ENGINE
 # ════════════════════════════════════════════════════════════
 
-def build_final_prompt(prompt: str, intent: str, pattern_hint: str = "") -> str:
-    if intent == "general":
-        return prompt
+PATTERN_TEMPLATES = {
+    "throughput": {
+        "label": "⏱ Throughput / Duration",
+        "query": (
+            "DATEDIFF(\n"
+            "    'day',\n"
+            "    PU_MIN(\n"
+            "        DOMAIN_TABLE(\"<CASE_TABLE>\"),\n"
+            "        \"<EVENT_TABLE>\".\"TIMESTAMP\"\n"
+            "    ),\n"
+            "    PU_MAX(\n"
+            "        DOMAIN_TABLE(\"<CASE_TABLE>\"),\n"
+            "        \"<EVENT_TABLE>\".\"TIMESTAMP\"\n"
+            "    )\n"
+            ")"
+        ),
+    },
+    "rework": {
+        "label": "🔁 Rework Detection",
+        "query": (
+            "ACTIVATION_COUNT(\n"
+            "    \"<EVENT_TABLE>\".\"ACTIVITY\"\n"
+            ") > 1"
+        ),
+    },
+    "first": {
+        "label": "🥇 First Activity",
+        "query": (
+            "PU_FIRST(\n"
+            "    DOMAIN_TABLE(\"<CASE_TABLE>\"),\n"
+            "    \"<EVENT_TABLE>\".\"ACTIVITY\",\n"
+            "    ORDER BY \"<EVENT_TABLE>\".\"TIMESTAMP\" ASC\n"
+            ")"
+        ),
+    },
+    "last": {
+        "label": "🏁 Last Activity",
+        "query": (
+            "PU_LAST(\n"
+            "    DOMAIN_TABLE(\"<CASE_TABLE>\"),\n"
+            "    \"<EVENT_TABLE>\".\"ACTIVITY\",\n"
+            "    ORDER BY \"<EVENT_TABLE>\".\"TIMESTAMP\" ASC\n"
+            ")"
+        ),
+    },
+    "avg": {
+        "label": "📊 Average per Case",
+        "query": (
+            "PU_AVG(\n"
+            "    DOMAIN_TABLE(\"<CASE_TABLE>\"),\n"
+            "    \"<CASE_TABLE>\".\"<VALUE>\"\n"
+            ")"
+        ),
+    },
+    "sum": {
+        "label": "➕ Sum per Case",
+        "query": (
+            "PU_SUM(\n"
+            "    DOMAIN_TABLE(\"<CASE_TABLE>\"),\n"
+            "    \"<CASE_TABLE>\".\"<VALUE>\"\n"
+            ")"
+        ),
+    },
+    "count": {
+        "label": "🔢 Count Events",
+        "query": (
+            "PU_COUNT(\n"
+            "    DOMAIN_TABLE(\"<CASE_TABLE>\"),\n"
+            "    \"<EVENT_TABLE>\".\"<EVENT_ID>\"\n"
+            ")"
+        ),
+    },
+    "case_when": {
+        "label": "🏷 Classify with CASE WHEN",
+        "query": (
+            "CASE\n"
+            "    WHEN DATEDIFF('day', \"<CASE_TABLE>\".\"START\", \"<CASE_TABLE>\".\"END\") <= 5\n"
+            "        THEN 'Fast'\n"
+            "    WHEN DATEDIFF('day', \"<CASE_TABLE>\".\"START\", \"<CASE_TABLE>\".\"END\") <= 15\n"
+            "        THEN 'Medium'\n"
+            "    ELSE 'Slow'\n"
+            "END"
+        ),
+    },
+    "running_sum": {
+        "label": "📈 Running Sum",
+        "query": (
+            "RUNNING_SUM(\n"
+            "    \"<EVENT_TABLE>\".\"<VALUE>\"\n"
+            ")"
+        ),
+    },
+    "filter": {
+        "label": "🔍 Filtered Aggregation",
+        "query": (
+            "PU_COUNT(\n"
+            "    DOMAIN_TABLE(\"<CASE_TABLE>\"),\n"
+            "    \"<EVENT_TABLE>\".\"<EVENT_ID>\",\n"
+            "    FILTER \"<EVENT_TABLE>\".\"ACTIVITY\" = '<ACTIVITY_NAME>'\n"
+            ")"
+        ),
+    },
+}
 
-    context = search_examples(prompt)
 
-    ctx_block = (
-        f"Knowledge Base Examples (study syntax, adapt to requirement):\n"
-        f"{'━' * 50}\n{context}\n{'━' * 50}\n\n"
-        if context.strip()
-        else "No matching examples found. Use your expert PQL knowledge.\n\n"
-    )
+def detect_problem(prompt):
+    p = prompt.lower()
 
-    functions_hint = (
-        f"Available PQL functions:\n"
-        f"{', '.join(VALID_PQL_FUNCTIONS)}\n\n"
-    )
+    if any(w in p for w in ["throughput", "duration", "time between", "cycle time", "lead time"]):
+        return "throughput"
+    if any(w in p for w in ["rework", "repeated", "loop"]):
+        return "rework"
+    if any(w in p for w in ["running sum", "running total", "cumulative"]):
+        return "running_sum"
+    if any(w in p for w in ["first activity", "first event", "first step"]):
+        return "first"
+    if any(w in p for w in ["last activity", "last event", "current status"]):
+        return "last"
+    if any(w in p for w in ["classify", "classification", "case when", "categorize", "label"]):
+        return "case_when"
+    if any(w in p for w in ["filter by", "only for", "where activity"]):
+        return "filter"
+    if any(w in p for w in ["average", "avg", "mean"]):
+        return "avg"
+    if any(w in p for w in ["total", "sum"]):
+        return "sum"
+    if "count" in p:
+        return "count"
 
-    pattern_block = (
-        f"PATTERN HINT — use as base syntax and adapt it:\n"
-        f"```\n{pattern_hint}\n```\n\n"
-        if pattern_hint
-        else ""
-    )
+    return None
 
-    if intent == "write_pql":
-        return (
-            f"TASK: Write a custom PQL query for the user's exact requirement.\n\n"
-            f"{pattern_block}"
-            f"{ctx_block}"
-            f"{functions_hint}"
-            f"User Requirement:\n{prompt}\n\n"
-            f"INSTRUCTIONS:\n"
-            f"- Study the syntax patterns from the examples above.\n"
-            f"- Adapt them to the user's specific requirement.\n"
-            f"- Use the user's actual table/column names if given.\n"
-            f"- If no names given, use <CASE_TABLE>, <EVENT_TABLE>, <ACTIVITY_COL>, <VALUE_COL>.\n"
-            f"- Write valid PQL only — never SQL.\n"
-            f"- Explain every line after writing the query.\n"
-        )
-    elif intent == "explain_pql":
-        return (
-            f"TASK: Explain the PQL function or concept the user is asking about.\n\n"
-            f"{ctx_block}"
-            f"User Question:\n{prompt}\n"
-        )
-    return prompt
+
+def template_query(problem):
+    tmpl = PATTERN_TEMPLATES.get(problem)
+    if tmpl:
+        return tmpl["query"]
+    return None
 
 # ════════════════════════════════════════════════════════════
 # EXTRACT PQL FROM RESPONSE
 # ════════════════════════════════════════════════════════════
 
-def extract_pql(text: str) -> str:
+def extract_pql(text):
     match = re.search(r"```.*?\n(.*?)```", text, re.DOTALL)
     if match:
         return match.group(1).strip()
@@ -636,13 +544,13 @@ def extract_pql(text: str) -> str:
 # VALIDATE PQL
 # ════════════════════════════════════════════════════════════
 
-def validate_pql(query: str) -> str:
+def validate_pql(query):
     try:
         response = client.chat.completions.create(
             model=MODEL_NAME,
             messages=[
                 {"role": "system", "content": VALIDATOR_PROMPT},
-                {"role": "user",   "content": f"Validate this PQL query:\n\n```\n{query}\n```"}
+                {"role": "user",   "content": f"Validate this PQL:\n\n```\n{query}\n```"}
             ],
             temperature=0,
             max_tokens=800
@@ -652,17 +560,17 @@ def validate_pql(query: str) -> str:
         return f"⚠️ Validator error: {e}"
 
 # ════════════════════════════════════════════════════════════
-# SELF-LEARNING — save every Q&A to CSV
+# SELF-LEARNING — SAVE TO CSV
 # ════════════════════════════════════════════════════════════
 
-def save_training_example(question: str, query: str):
+def save_training_example(question, query):
     file   = "training_data.csv"
     exists = os.path.isfile(file)
     try:
         with open(file, "a", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             if not exists:
-                writer.writerow(["Timestamp", "Question", "PQL_Query"])
+                writer.writerow(["time", "question", "query"])
             writer.writerow([datetime.now().isoformat(), question, query])
     except Exception:
         pass
@@ -674,21 +582,10 @@ def save_training_example(question: str, query: str):
 with st.sidebar:
     st.markdown("## ⚙️ Settings")
 
-    st.session_state.mode = st.selectbox(
-        "Response Mode",
-        ["Auto", "Always use Knowledge Base", "LLM only"],
-        index=0,
-        help=(
-            "Auto = smart intent detection.\n"
-            "Knowledge Base = always retrieve examples.\n"
-            "LLM only = skip retrieval."
-        )
-    )
-
     st.session_state.validate = st.toggle(
         "🔎 Auto-validate PQL",
         value=True,
-        help="Runs a second LLM pass to check and fix PQL syntax errors."
+        help="Runs a second LLM pass to check and fix syntax errors."
     )
 
     st.markdown("---")
@@ -708,7 +605,7 @@ with st.sidebar:
             msg = (
                 f"**📌 PQL Template — {tmpl['label']}:**\n\n"
                 f"```\n{tmpl['query']}\n```\n\n"
-                f"💡 Replace `<CASE_TABLE>`, `<EVENT_TABLE>`, `<VALUE_COL>` "
+                f"💡 Replace `<CASE_TABLE>`, `<EVENT_TABLE>`, `<VALUE>` "
                 f"with your actual table and column names."
             )
             st.session_state.messages.append({"role": "assistant", "content": msg})
@@ -746,8 +643,7 @@ with st.sidebar:
 
 st.title("🧠 Celonis Process Mining Copilot")
 st.markdown(
-    "*Powered by Divyansh · 195+ PQL functions · "
-    "Ask anything or say: \"Write a PQL query for...\"*"
+    "*Powered by Divyansh · Ask anything or say: \"Write a PQL query for...\"*"
 )
 st.markdown("---")
 
@@ -763,36 +659,47 @@ for msg in st.session_state.messages:
 # CHAT INPUT
 # ════════════════════════════════════════════════════════════
 
-if prompt := st.chat_input("Ask a PQL question or say: 'Write a PQL query for...'"):
+if prompt := st.chat_input("Ask a Celonis PQL question..."):
 
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # ── Determine intent ────────────────────────────────────
-    intent = detect_intent(prompt)
-    if st.session_state.mode == "Always use Knowledge Base":
-        intent = "explain_pql" if intent == "general" else intent
-    elif st.session_state.mode == "LLM only":
-        intent = "general"
+    # ── Pattern engine first ─────────────────────────────────
+    problem  = detect_problem(prompt)
+    pat_hint = template_query(problem) if problem else None
 
-    # ── Check pattern engine ─────────────────────────────────
-    problem       = detect_problem(prompt)
-    pattern_hint  = PATTERN_TEMPLATES[problem]["query"] if problem else ""
+    if pat_hint:
+        # Use pattern as base, let LLM adapt it with context
+        context      = retrieve_context(prompt)
+        final_prompt = (
+            f"PATTERN HINT — use as base syntax and adapt to the user's requirement:\n"
+            f"```\n{pat_hint}\n```\n\n"
+            f"Knowledge Base Context:\n"
+            f"{'━' * 40}\n{context}\n{'━' * 40}\n\n"
+            f"User Requirement:\n{prompt}\n\n"
+            f"Adapt the pattern above to exactly match the user's requirement. "
+            f"Use their actual table/column names if given, otherwise use clear placeholders."
+        )
+    else:
+        context      = retrieve_context(prompt)
+        final_prompt = (
+            f"User Question:\n{prompt}\n\n"
+            f"Knowledge Base Context:\n"
+            f"{'━' * 40}\n{context}\n{'━' * 40}\n\n"
+            f"Write correct Celonis PQL to answer the question."
+        )
 
-    # ── Build prompt ─────────────────────────────────────────
-    final_prompt = build_final_prompt(prompt, intent, pattern_hint=pattern_hint)
-
-    # ── Build history (exclude latest — replaced by final_prompt) ──
+    # ── Build history (exclude latest) ──────────────────────
     history = [
         {"role": m["role"], "content": m["content"]}
         for m in st.session_state.messages[:-1]
     ]
 
     with st.chat_message("assistant"):
-        with st.spinner("Searching knowledge base & writing PQL..."):
+        with st.spinner("Thinking..."):
 
-            # Step 1: Generate answer
+            # Step 1: Generate
             try:
                 response = client.chat.completions.create(
                     model=MODEL_NAME,
@@ -808,11 +715,11 @@ if prompt := st.chat_input("Ask a PQL question or say: 'Write a PQL query for...
             except Exception as e:
                 reply = f"❌ Groq API error: `{str(e)}`"
 
-            # Step 2: Extract PQL & save for self-learning
+            # Step 2: Extract & save
             generated_query = extract_pql(reply)
             save_training_example(prompt, generated_query)
 
-            # Step 3: Validate (optional toggle)
+            # Step 3: Validate
             if st.session_state.validate and generated_query.strip():
                 validated   = validate_pql(generated_query)
                 final_reply = (
@@ -826,4 +733,3 @@ if prompt := st.chat_input("Ask a PQL question or say: 'Write a PQL query for...
             st.markdown(final_reply)
 
     st.session_state.messages.append({"role": "assistant", "content": final_reply})
-
