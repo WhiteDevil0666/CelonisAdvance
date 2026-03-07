@@ -284,8 +284,8 @@ Respond ONLY in this format:
 @st.cache_resource
 def load_vector_store():
     try:
-        index = faiss.read_index("pql_faiss.index")
-        with open("pql_metadata.pkl", "rb") as f:
+        index = faiss.read_index("pql_knowledge.index")
+        with open("pql_knowledge.pkl", "rb") as f:
             metadata = pickle.load(f)
         return index, metadata
     except Exception as e:
