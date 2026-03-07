@@ -7,9 +7,9 @@ import pickle
 import re
 import base64
 
-# =====================================
+# =====================================================
 # PAGE CONFIG
-# =====================================
+# =====================================================
 
 st.set_page_config(
     page_title="Celonis Copilot",
@@ -17,70 +17,53 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# =====================================
-# BACKGROUND SETUP
-# =====================================
+# =====================================================
+# BACKGROUND
+# =====================================================
 
 def set_background(image_file):
 
-    with open(image_file, "rb") as f:
+    with open(image_file,"rb") as f:
         encoded = base64.b64encode(f.read()).decode()
 
-    page_bg = f"""
+    css = f"""
     <style>
 
     .stApp {{
         background:
-            linear-gradient(rgba(0,0,0,0.85), rgba(0,0,0,0.85)),
-            url("data:image/png;base64,{encoded}");
-        background-size: cover;
-        background-position: center;
-        background-attachment: fixed;
-    }}
-
-    .main {{
-        background-color: transparent !important;
-    }}
-
-    section.main > div {{
-        background-color: transparent !important;
-    }}
-
-    .block-container {{
-        padding-top: 2rem;
-        padding-bottom: 0rem;
+        linear-gradient(rgba(0,0,0,0.85),rgba(0,0,0,0.85)),
+        url("data:image/png;base64,{encoded}");
+        background-size:cover;
+        background-position:center;
+        background-attachment:fixed;
     }}
 
     .stChatMessage {{
-        background-color: rgba(20, 20, 30, 0.85);
-        border-radius: 12px;
-        padding: 12px;
+        background-color: rgba(20,20,30,0.85);
+        border-radius:12px;
+        padding:12px;
     }}
 
     div[data-testid="stChatInput"] {{
-        background-color: rgba(20, 20, 30, 0.95);
-        border-radius: 12px;
-        padding: 8px;
+        background-color: rgba(20,20,30,0.95);
+        border-radius:12px;
+        padding:8px;
     }}
 
-    section[data-testid="stSidebar"] {{
-        background-color: rgba(15, 15, 25, 0.95);
-    }}
-
-    h1, h2, h3, p, div, span {{
-        color: white !important;
+    h1,h2,h3,p,div,span {{
+        color:white !important;
     }}
 
     </style>
     """
 
-    st.markdown(page_bg, unsafe_allow_html=True)
+    st.markdown(css,unsafe_allow_html=True)
 
 set_background("background.png")
 
-# =====================================
-# CONFIGURATION
-# =====================================
+# =====================================================
+# CONFIG
+# =====================================================
 
 MODEL_NAME = "llama-3.3-70b-versatile"
 
@@ -88,26 +71,32 @@ client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
 EMBED_MODEL = SentenceTransformer("all-MiniLM-L6-v2")
 
-# =====================================
+# =====================================================
 # SYSTEM PROMPT
-# =====================================
+# =====================================================
 
 SYSTEM_PROMPT = """
-You are a Senior Celonis Process Mining Consultant AI.
+You are a Senior Celonis Process Mining Consultant.
 
-Rules:
+Important Rules:
 
-1. Use ONLY Celonis documentation provided in context.
-2. Preserve PQL syntax exactly.
+1. Use ONLY the Celonis documentation provided in the context.
+2. Preserve Celonis PQL syntax exactly.
 3. Never convert PQL to SQL.
 4. Never invent functions.
-5. If documentation does not contain the answer say:
-   "Not found in official Celonis documentation."
+5. Celonis relationships are defined in the data model.
+6. Do NOT write SQL join conditions like:
+   Orders.CustomerID = Customers.CustomerID
+7. Avoid SQL concepts like JOIN, WHERE, GROUP BY.
+
+If information is not found in documentation respond:
+
+"Not found in official Celonis documentation."
 """
 
-# =====================================
-# LOAD VECTOR STORE
-# =====================================
+# =====================================================
+# LOAD VECTOR DATABASE
+# =====================================================
 
 @st.cache_resource
 def load_vector_store():
@@ -120,91 +109,91 @@ def load_vector_store():
 
             metadata = pickle.load(f)
 
-        return index, metadata
+        return index,metadata
 
     except:
 
-        st.warning("Vector store not found")
+        st.warning("Vector store could not be loaded")
 
-        return None, []
+        return None,[]
 
+index,metadata = load_vector_store()
 
-index, metadata = load_vector_store()
-
-# =====================================
-# SESSION MEMORY
-# =====================================
+# =====================================================
+# SESSION STATE
+# =====================================================
 
 if "messages" not in st.session_state:
 
     st.session_state.messages = []
 
-# =====================================
-# QUERY DETECTION
-# =====================================
+# =====================================================
+# DETECT CELOINIS QUERY
+# =====================================================
 
 def is_celonis_query(prompt):
 
     keywords = [
-        "celonis","pql","pu_","datediff",
-        "pull-up","throughput","event log"
+        "celonis","pql","pu_",
+        "datediff","pull-up",
+        "throughput","event log"
     ]
 
-    return any(word in prompt.lower() for word in keywords)
+    return any(k in prompt.lower() for k in keywords)
 
-# =====================================
+# =====================================================
 # DETECT PQL FUNCTION
-# =====================================
+# =====================================================
 
 def detect_pql_function(query):
 
     pattern = r"\b(PU_[A-Z_]+|DATEDIFF|RUNNING_SUM|ACTIVATION_COUNT)\b"
 
-    match = re.search(pattern, query.upper())
+    match = re.search(pattern,query.upper())
 
     if match:
         return match.group(1)
 
     return None
 
-# =====================================
-# EXACT FUNCTION RETRIEVAL
-# =====================================
+# =====================================================
+# FUNCTION FIRST RETRIEVAL
+# =====================================================
 
-def exact_function_match(query):
+def retrieve_function_doc(query):
 
-    function_name = detect_pql_function(query)
+    function = detect_pql_function(query)
 
-    if not function_name:
+    if not function:
         return None
 
     for item in metadata:
 
         text = item.get("text","").upper()
 
-        if function_name in text:
+        if function in text:
 
             return item["text"]
 
     return None
 
-# =====================================
+# =====================================================
 # SEMANTIC SEARCH
-# =====================================
+# =====================================================
 
-def semantic_search(query, top_k=5):
+def semantic_search(query,top_k=5):
 
     if index is None:
 
         return ""
 
-    query_embedding = EMBED_MODEL.encode([query])
+    embedding = EMBED_MODEL.encode([query])
 
-    query_embedding = np.array(query_embedding).astype("float32")
+    embedding = np.array(embedding).astype("float32")
 
-    faiss.normalize_L2(query_embedding)
+    faiss.normalize_L2(embedding)
 
-    D, I = index.search(query_embedding, top_k)
+    D,I = index.search(embedding,top_k)
 
     results = []
 
@@ -216,50 +205,50 @@ def semantic_search(query, top_k=5):
 
     return "\n\n".join(results)
 
-# =====================================
+# =====================================================
 # HYBRID RETRIEVAL
-# =====================================
+# =====================================================
 
 def retrieve_context(prompt):
 
-    function_context = exact_function_match(prompt)
+    function_doc = retrieve_function_doc(prompt)
 
-    semantic_context = semantic_search(prompt)
+    semantic_doc = semantic_search(prompt)
 
-    if function_context:
+    if function_doc:
 
         return f"""
 FUNCTION DOCUMENTATION
 ----------------------
-{function_context}
+{function_doc}
 
-ADDITIONAL DOCUMENTATION
-------------------------
-{semantic_context}
+RELATED DOCUMENTATION
+----------------------
+{semantic_doc}
 """
 
-    return semantic_context
+    return semantic_doc
 
-# =====================================
+# =====================================================
 # HEADER
-# =====================================
+# =====================================================
 
 st.title("🧠 Process Mining Copilot (Celonis)")
 st.markdown("Powered by Divyansh")
 
-# =====================================
-# DISPLAY CHAT HISTORY
-# =====================================
+# =====================================================
+# CHAT HISTORY
+# =====================================================
 
-for message in st.session_state.messages:
+for msg in st.session_state.messages:
 
-    with st.chat_message(message["role"]):
+    with st.chat_message(msg["role"]):
 
-        st.markdown(message["content"])
+        st.markdown(msg["content"])
 
-# =====================================
+# =====================================================
 # CHAT INPUT
-# =====================================
+# =====================================================
 
 if prompt := st.chat_input("Ask your question..."):
 
@@ -269,6 +258,7 @@ if prompt := st.chat_input("Ask your question..."):
     })
 
     with st.chat_message("user"):
+
         st.markdown(prompt)
 
     if is_celonis_query(prompt):
@@ -276,26 +266,28 @@ if prompt := st.chat_input("Ask your question..."):
         context = retrieve_context(prompt)
 
         final_prompt = f"""
-You MUST answer using ONLY the Celonis documentation below.
+You MUST answer using ONLY the documentation below.
 
-==============================
+=============================
 OFFICIAL CELOINIS DOCUMENTATION
-==============================
+=============================
 {context}
 
-==============================
+=============================
 USER QUESTION
-==============================
+=============================
 {prompt}
 
 Rules:
 
-1. Preserve PQL syntax exactly.
-2. Do not convert PQL to SQL.
-3. Do not invent functions.
-4. If documentation does not contain the answer say:
+• Preserve Celonis syntax exactly
+• Never use SQL
+• Never write join conditions
+• Only use documented PQL functions
 
-"Not found in official Celonis documentation."
+If documentation does not contain the answer respond exactly with:
+
+Not found in official Celonis documentation.
 """
 
     else:
@@ -323,20 +315,28 @@ Rules:
             # GUARDRAIL AGAINST FAKE FUNCTIONS
             # =====================================
 
-            known_functions = [
+            valid_functions = [
                 "PU_SUM","PU_AVG","PU_MIN","PU_MAX",
                 "PU_FIRST","PU_LAST","PU_COUNT",
                 "PU_COUNT_DISTINCT","PU_MEDIAN",
                 "PU_STDEV"
             ]
 
-            detected = re.findall(r'PU_[A-Z_]+', reply)
+            found = re.findall(r'PU_[A-Z_]+',reply)
 
-            for f in detected:
+            for f in found:
 
-                if f not in known_functions:
+                if f not in valid_functions:
 
                     reply += "\n\n⚠️ Warning: Possible non-standard PQL function detected."
+
+            # =====================================
+            # REMOVE SQL JOIN STYLE
+            # =====================================
+
+            if "=" in reply and "CUSTOMER" in reply.upper():
+
+                reply += "\n\n⚠️ Celonis relationships are defined in the data model. SQL-style joins are not required."
 
             st.markdown(reply)
 
