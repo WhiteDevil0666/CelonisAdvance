@@ -6,576 +6,301 @@ import numpy as np
 import pickle
 import re
 import base64
-import csv
-import os
-from datetime import datetime
 
-
-# ==========================================================
+# =====================================
 # PAGE CONFIG
-# ==========================================================
+# =====================================
 
 st.set_page_config(
-    page_title="Celonis Process Mining Copilot",
+    page_title="Celonis Copilot",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-
-# ==========================================================
-# BACKGROUND
-# ==========================================================
+# =====================================
+# BACKGROUND SETUP
+# =====================================
 
 def set_background(image_file):
-    try:
-        with open(image_file, "rb") as f:
-            encoded = base64.b64encode(f.read()).decode()
-        bg_style = f"""
-        background:
-        linear-gradient(rgba(0,0,0,0.83),rgba(0,0,0,0.83)),
-        url("data:image/png;base64,{encoded}");
-        background-size:cover;
-        background-position:center;
-        background-attachment:fixed;
-        """
-    except:
-        bg_style = "background:linear-gradient(135deg,#0d0d1a,#141428,#0f1a2e);"
+    with open(image_file, "rb") as f:
+        encoded = base64.b64encode(f.read()).decode()
 
-    css = f"""
+    page_bg = f"""
     <style>
-    .stApp {{ {bg_style} }}
-    pre {{
-        background:#13131f !important;
-        border-radius:10px;
-        padding:16px;
+
+    .stApp {{
+        background:
+            linear-gradient(rgba(0,0,0,0.85), rgba(0,0,0,0.85)),
+            url("data:image/png;base64,{encoded}");
+        background-size: cover;
+        background-position: center;
+        background-attachment: fixed;
     }}
+
+    .main {{
+        background-color: transparent !important;
+    }}
+
+    section.main > div {{
+        background-color: transparent !important;
+    }}
+
+    .block-container {{
+        padding-top: 2rem;
+        padding-bottom: 0rem;
+    }}
+
+    .stChatMessage {{
+        background-color: rgba(20, 20, 30, 0.85);
+        border-radius: 12px;
+        padding: 12px;
+    }}
+
+    div[data-testid="stChatInput"] {{
+        background-color: rgba(20, 20, 30, 0.95);
+        border-radius: 12px;
+        padding: 8px;
+    }}
+
+    section[data-testid="stSidebar"] {{
+        background-color: rgba(15, 15, 25, 0.95);
+    }}
+
+    h1, h2, h3, p, div, span {{
+        color: white !important;
+    }}
+
     </style>
     """
-    st.markdown(css, unsafe_allow_html=True)
+
+    st.markdown(page_bg, unsafe_allow_html=True)
 
 
 set_background("background.png")
 
-
-# ==========================================================
-# CONFIG
-# ==========================================================
+# =====================================
+# CONFIGURATION
+# =====================================
 
 MODEL_NAME = "llama-3.3-70b-versatile"
-
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
-
 EMBED_MODEL = SentenceTransformer("all-MiniLM-L6-v2")
 
-
-# ==========================================================
-# VALID PQL FUNCTIONS
-# ==========================================================
-
-VALID_PQL_FUNCTIONS = [
-    "PU_COUNT", "PU_SUM", "PU_AVG", "PU_MIN", "PU_MAX",
-    "PU_FIRST", "PU_LAST", "PU_COUNT_DISTINCT",
-    "DATEDIFF", "RUNNING_SUM", "ACTIVATION_COUNT",
-    "SOURCE", "TARGET", "CALC_THROUGHPUT", "CALC_REWORK"
-]
-
-
-# ==========================================================
-# PQL FUNCTION BRAIN
-# ==========================================================
-
-PQL_FUNCTION_BRAIN = {
-    "throughput":       "DATEDIFF",
-    "cycle time":       "DATEDIFF",
-    "lead time":        "DATEDIFF",
-    "duration":         "DATEDIFF",
-    "average":          "PU_AVG",
-    "mean":             "PU_AVG",
-    "sum":              "PU_SUM",
-    "total":            "PU_SUM",
-    "count":            "PU_COUNT",
-    "minimum":          "PU_MIN",
-    "maximum":          "PU_MAX",
-    "first activity":   "PU_FIRST",
-    "last activity":    "PU_LAST",
-    "distinct":         "PU_COUNT_DISTINCT",
-    "running":          "RUNNING_SUM",
-    "rework":           "ACTIVATION_COUNT"
-}
-
-
-def detect_best_function(prompt):
-    p = prompt.lower()
-    for key, func in PQL_FUNCTION_BRAIN.items():
-        if key in p:
-            return func
-    return None
-
-
-# ==========================================================
+# =====================================
 # SYSTEM PROMPT
-# ==========================================================
+# =====================================
 
 SYSTEM_PROMPT = """
-You are a Senior Celonis Process Mining Consultant specialised in PQL.
+You are a Senior Celonis Process Mining Consultant AI.
 
-Never produce SQL.
+STRICT RULES:
 
-Only produce Celonis PQL.
-
-Column format:
-
-"TABLE"."COLUMN"
-
-Pull-up syntax:
-
-PU_SUM(
- DOMAIN_TABLE("CASE_TABLE"),
- "CASE_TABLE"."VALUE"
-)
-
-Return answers like:
-
-📌 PQL Query
-
-QUERY
-
-
-📖 Explanation
-Explain step by step.
-
-💡 Note
-Tips if required.
+1. Use ONLY the provided documentation context.
+2. Preserve official Celonis syntax EXACTLY.
+3. Never convert PQL to SQL.
+4. Never invent functions or syntax.
+5. If information is missing, say:
+   "Not found in official Celonis documentation."
+6. Prioritize accuracy over creativity.
 """
 
-
-# ==========================================================
-# VALIDATOR PROMPT
-# ==========================================================
-
-VALIDATOR_PROMPT = f"""
-You are a strict Celonis PQL syntax validator.
-
-Valid functions:
-{",".join(VALID_PQL_FUNCTIONS)}
-
-Check:
-
-- SQL keywords
-- wrong column format
-- missing commas
-- invalid DOMAIN_TABLE usage
-
-Return:
-
-Validation Status: PASSED or ISSUES FOUND
-Corrected Query:
-<query>
-Notes:
-<issues>
-"""
-
-
-# ==========================================================
+# =====================================
 # LOAD VECTOR STORE
-# ==========================================================
+# =====================================
 
 @st.cache_resource
 def load_vector_store():
     try:
-        index = faiss.read_index("pql_knowledge.index")
-        with open("pql_knowledge.pkl", "rb") as f:
+        index = faiss.read_index("pql_faiss.index")
+
+        with open("pql_metadata.pkl", "rb") as f:
             metadata = pickle.load(f)
+
         return index, metadata
+
     except Exception as e:
-        st.warning(f"⚠️ Knowledge base not found ({e}). Running in LLM-only mode.")
+
+        st.warning("Vector store could not be loaded.")
         return None, []
 
 
-vector_index, vector_metadata = load_vector_store()
+index, metadata = load_vector_store()
 
-
-# ==========================================================
-# SESSION STATE
-# ==========================================================
+# =====================================
+# SESSION MEMORY
+# =====================================
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-if "validate" not in st.session_state:
-    st.session_state.validate = True
+# =====================================
+# QUERY DETECTION
+# =====================================
 
+def is_celonis_query(prompt):
 
-# ==========================================================
-# NORMALIZE METADATA
-# ==========================================================
+    keywords = [
+        "celonis","pql","pu_","datediff",
+        "process query language","pull-up",
+        "throughput","event log"
+    ]
 
-def normalize_metadata(item):
-    if isinstance(item, dict):
-        return item
-    return {
-        "function": "PQL",
-        "question": "Example",
-        "answer":   str(item)
-    }
+    return any(word in prompt.lower() for word in keywords)
 
-
-# ==========================================================
-# EXACT MATCH SEARCH
-# ==========================================================
+# =====================================
+# EXACT FUNCTION MATCH
+# =====================================
 
 def exact_function_match(query):
-    if not vector_metadata:
-        return []
 
-    q       = query.upper()
-    results = []
-    seen    = set()
+    query_upper = query.upper()
 
-    for raw in vector_metadata:
-        item = normalize_metadata(raw)
-        func = item.get("function", "").upper()
-        if func and func in q and func not in seen:
-            results.append(item)
-            seen.add(func)
+    for item in metadata:
 
-    return results
+        text = item.get("text","").upper()
 
+        funcs = re.findall(r'PU_[A-Z_]+', query_upper)
 
-# ==========================================================
-# SEMANTIC SEARCH
-# ==========================================================
+        for f in funcs:
 
-def semantic_search(query, top_k=6):
-    if vector_index is None:
-        return []
+            if f in text:
 
-    emb = EMBED_MODEL.encode([query])
-    emb = np.array(emb).astype("float32")
-    faiss.normalize_L2(emb)
-
-    _, I = vector_index.search(emb, top_k)
-
-    results = []
-    for idx in I[0]:
-        if idx < len(vector_metadata):
-            results.append(
-                normalize_metadata(vector_metadata[idx])
-            )
-
-    return results
-
-
-# ==========================================================
-# CONTEXT BUILDER
-# ==========================================================
-
-def retrieve_context(prompt):
-    exact    = exact_function_match(prompt)
-    semantic = semantic_search(prompt)
-    combined = exact + semantic
-
-    if not combined:
-        return ""
-
-    text = ""
-    for item in combined[:6]:
-        text += f"""
-Function: {item.get("function")}
-
-Example Question:
-{item.get("question")}
-
-PQL Answer:
-{item.get("answer")}
-
----
-"""
-    return text
-
-
-# ==========================================================
-# PATTERN ENGINE
-# ==========================================================
-
-PATTERN_TEMPLATES = {
-
-    "throughput": """
-DATEDIFF(
- 'day',
- PU_MIN(
-  DOMAIN_TABLE("<CASE_TABLE>"),
-  "<EVENT_TABLE>"."TIMESTAMP"
- ),
- PU_MAX(
-  DOMAIN_TABLE("<CASE_TABLE>"),
-  "<EVENT_TABLE>"."TIMESTAMP"
- )
-)
-""",
-
-    "rework": """
-ACTIVATION_COUNT(
- "<EVENT_TABLE>"."ACTIVITY"
-) > 1
-""",
-
-    "first": """
-PU_FIRST(
- DOMAIN_TABLE("<CASE_TABLE>"),
- "<EVENT_TABLE>"."ACTIVITY"
-)
-""",
-
-    "last": """
-PU_LAST(
- DOMAIN_TABLE("<CASE_TABLE>"),
- "<EVENT_TABLE>"."ACTIVITY"
-)
-""",
-
-    "avg": """
-PU_AVG(
- DOMAIN_TABLE("<CASE_TABLE>"),
- "<CASE_TABLE>"."<VALUE>"
-)
-""",
-
-    "sum": """
-PU_SUM(
- DOMAIN_TABLE("<CASE_TABLE>"),
- "<CASE_TABLE>"."<VALUE>"
-)
-""",
-
-    "count": """
-PU_COUNT(
- DOMAIN_TABLE("<CASE_TABLE>"),
- "<EVENT_TABLE>"."<EVENT_ID>"
-)
-"""
-}
-
-
-def detect_problem(prompt):
-    p = prompt.lower()
-
-    if "throughput" in p or "duration" in p:
-        return "throughput"
-    if "rework" in p:
-        return "rework"
-    if "first activity" in p:
-        return "first"
-    if "last activity" in p:
-        return "last"
-    if "average" in p:
-        return "avg"
-    if "sum" in p:
-        return "sum"
-    if "count" in p:
-        return "count"
+                return item["text"]
 
     return None
 
+# =====================================
+# SEMANTIC SEARCH
+# =====================================
 
-# ==========================================================
-# ACTIVITY EXTRACTION
-# ==========================================================
+def semantic_search(query, top_k=5):
 
-def extract_activities(prompt):
-    pattern = r"between (.*?) and (.*)"
-    match   = re.search(pattern, prompt.lower())
+    if index is None:
+        return ""
 
-    if match:
-        start = match.group(1).strip().title()
-        end   = match.group(2).strip().title()
-        return start, end
+    query_embedding = EMBED_MODEL.encode([query])
 
-    return None, None
+    query_embedding = np.array(query_embedding).astype("float32")
 
+    faiss.normalize_L2(query_embedding)
 
-# ==========================================================
-# BUILD THROUGHPUT QUERY
-# ==========================================================
+    D, I = index.search(query_embedding, top_k)
 
-def build_activity_throughput_query(start_activity, end_activity):
-    query = f"""
-DATEDIFF(
- 'day',
- PU_FIRST(
-  DOMAIN_TABLE("<CASE_TABLE>"),
-  "<EVENT_TABLE>"."TIMESTAMP",
-  FILTER "<EVENT_TABLE>"."ACTIVITY" = '{start_activity}'
- ),
- PU_FIRST(
-  DOMAIN_TABLE("<CASE_TABLE>"),
-  "<EVENT_TABLE>"."TIMESTAMP",
-  FILTER "<EVENT_TABLE>"."ACTIVITY" = '{end_activity}'
- )
-)
-"""
-    return query
+    results = []
 
+    for idx in I[0]:
 
-# ==========================================================
-# EXTRACT PQL
-# ==========================================================
+        if idx < len(metadata):
 
-def extract_pql(text):
-    match = re.search(r"```(?:pql)?\s*(.*?)```", text, re.DOTALL)
-    if match:
-        return match.group(1).strip()
-    return text.strip()
+            results.append(metadata[idx]["text"])
 
+    return "\n\n".join(results)
 
-# ==========================================================
-# VALIDATE PQL
-# ==========================================================
+# =====================================
+# HYBRID RETRIEVAL
+# =====================================
 
-def validate_pql(query):
-    try:
-        response = client.chat.completions.create(
-            model=MODEL_NAME,
-            messages=[
-                {"role": "system", "content": VALIDATOR_PROMPT},
-                {"role": "user",   "content": query}
-            ],
-            temperature=0
-        )
-        return response.choices[0].message.content
-    except Exception as e:
-        return f"Validator error: {e}"
+def retrieve_context(prompt):
 
+    exact = exact_function_match(prompt)
 
-# ==========================================================
-# SAVE TRAINING DATA
-# ==========================================================
+    semantic = semantic_search(prompt)
 
-def save_training_example(question, query):
-    file   = "training_data.csv"
-    exists = os.path.isfile(file)
+    if exact:
 
-    with open(file, "a", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f)
-        if not exists:
-            writer.writerow(["time", "question", "query"])
-        writer.writerow([datetime.now(), question, query])
+        return exact + "\n\n" + semantic
 
+    return semantic
 
-# ==========================================================
-# AUTO TRAIN VECTOR STORE
-# ==========================================================
+# =====================================
+# UI HEADER
+# =====================================
 
-def auto_train_vector_store(question, query):
-    if vector_index is None:
-        return
+st.title("🧠 Process Mining Copilot (Celonis)")
+st.markdown("Powered by Divyansh")
 
-    text = f"{question}\n{query}"
-    emb  = EMBED_MODEL.encode([text])
-    emb  = np.array(emb).astype("float32")
+# =====================================
+# DISPLAY CHAT HISTORY
+# =====================================
 
-    try:
-        vector_index.add(emb)
-        vector_metadata.append({
-            "function": "AUTO_LEARNED",
-            "question": question,
-            "answer":   query
-        })
-    except:
-        pass
+for message in st.session_state.messages:
 
+    with st.chat_message(message["role"]):
 
-# ==========================================================
-# UI
-# ==========================================================
+        st.markdown(message["content"])
 
-st.title("🧠 Celonis Process Mining Copilot")
-
-for msg in st.session_state.messages:
-    with st.chat_message(msg["role"]):
-        st.markdown(msg["content"])
-
-
-# ==========================================================
+# =====================================
 # CHAT INPUT
-# ==========================================================
+# =====================================
 
-if prompt := st.chat_input("Ask Celonis PQL question"):
+if prompt := st.chat_input("Ask your question..."):
 
-    st.session_state.messages.append({
-        "role":    "user",
-        "content": prompt
-    })
+    st.session_state.messages.append({"role": "user", "content": prompt})
 
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    problem                      = detect_problem(prompt)
-    start_activity, end_activity = extract_activities(prompt)
+    if is_celonis_query(prompt):
 
-    if problem == "throughput" and start_activity and end_activity:
-        query = build_activity_throughput_query(start_activity, end_activity)
-        reply = f"""
-📌 PQL Query
+        context = retrieve_context(prompt)
 
-{query}
+        final_prompt = f"""
+You MUST answer using ONLY the documentation below.
 
+=====================
+OFFICIAL DOCUMENTATION
+=====================
+{context}
 
-Throughput between **{start_activity}** and **{end_activity}**
-"""
+=====================
+USER QUESTION
+=====================
+{prompt}
 
-    elif problem:
-        query = PATTERN_TEMPLATES[problem]
-        reply = f"""
-📌 PQL Query
+If the answer is not present in the documentation respond exactly with:
 
-{query}
-
-
-Generated using template.
+Not found in official Celonis documentation.
 """
 
     else:
-        context      = retrieve_context(prompt)
-        final_prompt = f"""
-User Question:
-{prompt}
 
-Context:
-{context}
-
-Write correct Celonis PQL.
-"""
-        response = client.chat.completions.create(
-            model=MODEL_NAME,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user",   "content": final_prompt}
-            ],
-            temperature=0.1
-        )
-        reply = response.choices[0].message.content
-
-    query      = extract_pql(reply)
-    validation = validate_pql(query)
-
-    save_training_example(prompt, query)
-    auto_train_vector_store(prompt, query)
-
-    final = f"""
-{reply}
-
----
-
-🔎 Validator Result
-
-{validation}
-"""
+        final_prompt = prompt
 
     with st.chat_message("assistant"):
-        st.markdown(final)
 
-    st.session_state.messages.append({
-        "role":    "assistant",
-        "content": final
-    })
+        with st.spinner("Analyzing documentation..."):
+
+            response = client.chat.completions.create(
+                model=MODEL_NAME,
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    *st.session_state.messages[:-1],
+                    {"role": "user", "content": final_prompt}
+                ],
+                temperature=0.1,
+                max_tokens=1500
+            )
+
+            reply = response.choices[0].message.content
+
+            # =====================================
+            # GUARDRAIL FOR HALLUCINATED FUNCTIONS
+            # =====================================
+
+            known_functions = [
+                "PU_SUM","PU_AVG","PU_MIN","PU_MAX","PU_FIRST",
+                "PU_LAST","PU_COUNT","PU_COUNT_DISTINCT",
+                "PU_MEDIAN","PU_STDEV"
+            ]
+
+            detected = re.findall(r'PU_[A-Z_]+', reply)
+
+            for f in detected:
+
+                if f not in known_functions:
+
+                    reply += "\n\n⚠️ Warning: Possible non-standard PQL function detected."
+
+            st.markdown(reply)
+
+    st.session_state.messages.append({"role": "assistant", "content": reply})
