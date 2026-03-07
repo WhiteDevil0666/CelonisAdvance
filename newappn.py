@@ -18,294 +18,108 @@ st.set_page_config(
 )
 
 # =====================================
-# FULL CSS — ALL WHITE AREAS FIXED
+# BACKGROUND
 # =====================================
 
 def set_background(image_file):
     try:
         with open(image_file, "rb") as f:
             encoded = base64.b64encode(f.read()).decode()
-        bg_style = f"""
+
+        css = f"""
+        <style>
+        .stApp {{
             background:
-                linear-gradient(rgba(0,0,0,0.83), rgba(0,0,0,0.83)),
+                linear-gradient(rgba(0,0,0,0.85), rgba(0,0,0,0.85)),
                 url("data:image/png;base64,{encoded}");
             background-size: cover;
             background-position: center;
             background-attachment: fixed;
+        }}
+
+        .main, section.main > div, .block-container {{
+            background-color: transparent !important;
+        }}
+
+        h1,h2,h3,h4,p,span,div {{
+            color:white !important;
+        }}
+
+        .stChatMessage {{
+            background-color: rgba(20,20,30,0.9);
+            border-radius: 12px;
+            padding: 14px;
+        }}
+
+        div[data-testid="stChatInput"] {{
+            background-color:#141428;
+            border-radius:10px;
+        }}
+
+        pre {{
+            background:#13131f !important;
+            border-radius:10px;
+        }}
+        </style>
         """
-    except FileNotFoundError:
-        bg_style = "background: linear-gradient(135deg, #0d0d1a 0%, #141428 50%, #0f1a2e 100%);"
+        st.markdown(css, unsafe_allow_html=True)
 
-    css = f"""
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap');
-
-    /* ─── Base app ─── */
-    .stApp {{
-        {bg_style}
-    }}
-    .main, section.main > div, .block-container {{
-        background-color: transparent !important;
-    }}
-    .block-container {{
-        padding-top: 2rem !important;
-        padding-bottom: 1rem !important;
-    }}
-
-    /* ─── KILL ALL WHITE BACKGROUNDS globally ─── */
-    *, *::before, *::after {{
-        box-sizing: border-box;
-    }}
-
-    /* Default text */
-    html, body {{
-        background-color: #0d0d1a !important;
-        color: #e2e2f0 !important;
-    }}
-
-    /* Every div/span/p text */
-    .stMarkdown, .stMarkdown p, .stMarkdown li,
-    .stMarkdown span, .stMarkdown div,
-    p, span, label, li, td, th {{
-        color: #e2e2f0 !important;
-    }}
-
-    h1, h2, h3, h4, h5, h6 {{
-        color: #ffffff !important;
-    }}
-
-    strong, b {{
-        color: #a78bfa !important;
-    }}
-
-    em, i {{
-        color: #94a3b8 !important;
-    }}
-
-    /* ─── Chat messages ─── */
-    .stChatMessage {{
-        background-color: rgba(18, 18, 32, 0.92) !important;
-        border: 1px solid rgba(255,255,255,0.07) !important;
-        border-radius: 14px !important;
-        padding: 16px !important;
-        margin-bottom: 8px !important;
-    }}
-
-    /* ─── CODE BLOCKS — DARK FORCED ─── */
-    pre {{
-        background-color: #13131f !important;
-        border: 1px solid rgba(139,92,246,0.3) !important;
-        border-radius: 10px !important;
-        padding: 16px !important;
-        overflow-x: auto !important;
-    }}
-    pre code {{
-        background-color: transparent !important;
-        color: #c9d1d9 !important;
-        font-family: 'JetBrains Mono', 'Fira Code', monospace !important;
-        font-size: 0.85rem !important;
-        white-space: pre !important;
-        line-height: 1.6 !important;
-    }}
-    code {{
-        background-color: #1e1e35 !important;
-        color: #c9d1d9 !important;
-        border-radius: 4px !important;
-        padding: 2px 6px !important;
-        font-family: 'JetBrains Mono', 'Fira Code', monospace !important;
-        font-size: 0.85rem !important;
-    }}
-    .stCodeBlock {{
-        background-color: #13131f !important;
-        border: 1px solid rgba(139,92,246,0.3) !important;
-        border-radius: 10px !important;
-    }}
-    .stCodeBlock code,
-    div[data-testid="stCode"] code {{
-        background-color: transparent !important;
-        color: #c9d1d9 !important;
-        font-family: 'JetBrains Mono', monospace !important;
-    }}
-    div[data-testid="stCode"] {{
-        background-color: #13131f !important;
-    }}
-
-    /* ─── CHAT INPUT — NUCLEAR WHITE BG FIX ─── */
-    div[data-testid="stChatInput"],
-    div[data-testid="stChatInput"] > div,
-    div[data-testid="stChatInput"] > div > div,
-    div[data-testid="stChatInput"] > div > div > div {{
-        background-color: #13131f !important;
-        border-radius: 14px !important;
-    }}
-    div[data-testid="stChatInput"] {{
-        border: 1px solid rgba(139,92,246,0.45) !important;
-    }}
-    /* The actual textarea element */
-    div[data-testid="stChatInput"] textarea,
-    div[data-testid="stChatInput"] textarea:focus,
-    div[data-testid="stChatInput"] textarea:active,
-    div[data-testid="stChatInput"] textarea:hover {{
-        background-color: #13131f !important;
-        background: #13131f !important;
-        color: #e2e2f0 !important;
-        caret-color: #a78bfa !important;
-        border: none !important;
-        outline: none !important;
-        box-shadow: none !important;
-        -webkit-box-shadow: none !important;
-    }}
-    div[data-testid="stChatInput"] textarea::placeholder {{
-        color: #6060aa !important;
-        opacity: 1 !important;
-    }}
-    /* Send button */
-    div[data-testid="stChatInput"] button,
-    div[data-testid="stChatInput"] button:hover {{
-        background-color: rgba(139,92,246,0.35) !important;
-        color: white !important;
-        border-radius: 8px !important;
-        border: none !important;
-    }}
-
-    /* ─── Sidebar ─── */
-    section[data-testid="stSidebar"] {{
-        background-color: #0b0b18 !important;
-        border-right: 1px solid rgba(255,255,255,0.06) !important;
-    }}
-    section[data-testid="stSidebar"] * {{
-        color: #e2e2f0 !important;
-    }}
-    section[data-testid="stSidebar"] .stButton button {{
-        background-color: rgba(30, 30, 55, 0.9) !important;
-        color: #e2e2f0 !important;
-        border: 1px solid rgba(139,92,246,0.25) !important;
-        border-radius: 9px !important;
-        text-align: left !important;
-        width: 100% !important;
-        margin-bottom: 5px !important;
-        font-size: 0.82rem !important;
-        padding: 8px 12px !important;
-        transition: all 0.2s ease;
-    }}
-    section[data-testid="stSidebar"] .stButton button:hover {{
-        background-color: rgba(139,92,246,0.25) !important;
-        border-color: rgba(139,92,246,0.6) !important;
-    }}
-
-    /* ─── Selectbox ─── */
-    div[data-testid="stSelectbox"] > div > div {{
-        background-color: #1a1a2e !important;
-        color: #e2e2f0 !important;
-        border: 1px solid rgba(139,92,246,0.3) !important;
-        border-radius: 8px !important;
-    }}
-    div[data-testid="stSelectbox"] svg {{
-        fill: #a78bfa !important;
-    }}
-
-    /* Dropdown options */
-    ul[data-testid="stSelectboxVirtualDropdown"] {{
-        background-color: #1a1a2e !important;
-        border: 1px solid rgba(139,92,246,0.3) !important;
-    }}
-    ul[data-testid="stSelectboxVirtualDropdown"] li {{
-        color: #e2e2f0 !important;
-    }}
-    ul[data-testid="stSelectboxVirtualDropdown"] li:hover {{
-        background-color: rgba(139,92,246,0.2) !important;
-    }}
-
-    /* ─── Horizontal divider ─── */
-    hr {{
-        border-color: rgba(255,255,255,0.08) !important;
-    }}
-
-    /* ─── Warning/info boxes ─── */
-    div[data-testid="stAlert"] {{
-        background-color: rgba(30,30,60,0.8) !important;
-        border: 1px solid rgba(139,92,246,0.3) !important;
-        color: #e2e2f0 !important;
-        border-radius: 8px !important;
-    }}
-
-    /* ─── Scrollbar ─── */
-    ::-webkit-scrollbar {{ width: 5px; height: 5px; }}
-    ::-webkit-scrollbar-track {{ background: #0d0d1a; }}
-    ::-webkit-scrollbar-thumb {{ background: #3a3a6a; border-radius: 4px; }}
-    ::-webkit-scrollbar-thumb:hover {{ background: #6060aa; }}
-
-    </style>
-    """
-    st.markdown(css, unsafe_allow_html=True)
+    except:
+        pass
 
 set_background("background.png")
 
 # =====================================
-# CONFIGURATION
+# CONFIG
 # =====================================
 
 MODEL_NAME = "llama-3.3-70b-versatile"
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
+
 EMBED_MODEL = SentenceTransformer("all-MiniLM-L6-v2")
 
 # =====================================
-# SYSTEM PROMPT — v3 UPGRADED
+# SYSTEM PROMPT
 # =====================================
 
 SYSTEM_PROMPT = """
-You are an expert Celonis Process Mining Consultant AI specialising in PQL (Process Query Language).
+You are an expert Celonis Process Mining Consultant AI specialising in PQL.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 CAPABILITIES
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-1. WRITE CUSTOM PQL QUERIES based on what the user describes.
-   - Extract actual table names, column names, and conditions from the user's question.
-   - Do NOT use placeholder names like ORDER_TABLE or ORDER_VALUE unless the user said them.
-   - If the user gives you real table/column names, use those EXACTLY.
-   - If the user does NOT provide table/column names, ask them first OR write the query
-     with clearly labelled placeholders like <YOUR_TABLE>, <YOUR_COLUMN> and tell them to replace.
+1. Write PQL queries
+2. Explain PQL functions
+3. Answer process mining questions
+4. Debug broken PQL queries
 
-2. EXPLAIN PQL functions with syntax and real examples.
+STRICT RULES
 
-3. ANSWER process mining conceptual questions.
+• NEVER write SQL
+• NEVER convert PQL to SQL
+• Use official PQL syntax
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-PQL SYNTAX RULES — STRICT
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+COLUMN FORMAT
+"TABLE"."COLUMN"
 
-✅ Column reference:       "TABLE_NAME"."COLUMN_NAME"
-✅ Pull-Up syntax:         PU_FUNCTION ( DOMAIN_TABLE ( "TABLE" ), "TABLE"."COLUMN", FILTER "TABLE"."COL" = 'value' )
-✅ Date difference:        DATEDIFF ( 'day', "TABLE"."START_DATE", "TABLE"."END_DATE" )
-✅ Case expression:        CASE WHEN condition THEN value ELSE other END
-✅ Source/Target:          SOURCE ( "TABLE"."ACTIVITY_COL", EXCLUDE DUPLICATE ACTIVITIES ) = 'ActivityName'
-✅ Running aggregation:    RUNNING_SUM ( "TABLE"."COLUMN" )
-✅ Rework detection:       ACTIVATION_COUNT ( "TABLE"."ACTIVITY_COL" ) > 1
+PULL UP SYNTAX
+PU_FUNCTION ( DOMAIN_TABLE ( "TABLE" ), "TABLE"."COLUMN" )
 
-❌ NEVER use: SELECT, FROM, WHERE, GROUP BY, JOIN, AS, COUNT(*), SUM()
-❌ NEVER write SQL
-❌ NEVER invent function names
-❌ NEVER use generic placeholders without telling the user to replace them
+DATE DIFF
+DATEDIFF ( 'day', "TABLE"."START", "TABLE"."END" )
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-RESPONSE FORMAT — ALWAYS USE THIS FOR QUERIES
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CASE EXPRESSION
+CASE WHEN condition THEN value ELSE other END
 
-**📌 PQL Query:**
-```
-<PQL code here — properly indented>
-```
+RESPONSE FORMAT FOR QUERIES
 
-**📖 What this does:**
-<plain English explanation, line by line>
+📌 PQL Query
+<code>
 
-**💡 Note:**
-<tips, edge cases, or what to replace if placeholders used>
+📖 Explanation
+<step explanation>
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-PRIORITY: Accuracy > Context-Awareness > Simplicity
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+💡 Notes
+<tips>
 """
 
 # =====================================
@@ -314,13 +128,18 @@ PRIORITY: Accuracy > Context-Awareness > Simplicity
 
 @st.cache_resource
 def load_vector_store():
+
     try:
+
         index = faiss.read_index("pql_faiss.index")
-        with open("pql_metadata.pkl", "rb") as f:
+
+        with open("pql_metadata.pkl","rb") as f:
             metadata = pickle.load(f)
+
         return index, metadata
-    except Exception as e:
-        st.warning(f"⚠️ Vector store not loaded ({e}). Running in LLM-only mode.")
+
+    except:
+        st.warning("Vector store not found — running LLM only mode")
         return None, []
 
 index, metadata = load_vector_store()
@@ -331,6 +150,7 @@ index, metadata = load_vector_store()
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
+
 if "mode" not in st.session_state:
     st.session_state.mode = "Auto"
 
@@ -339,139 +159,205 @@ if "mode" not in st.session_state:
 # =====================================
 
 def detect_intent(prompt):
-    p = prompt.lower()
-    write_kw = [
-        "write", "generate", "create", "build", "give me", "make a",
-        "query for", "pql for", "calculate", "compute", "show query",
-        "can you write", "can you create", "help me write", "i need a query",
-        "i want a query", "example query", "how would i"
-    ]
-    pql_kw = [
-        "celonis", "pql", "pu_", "datediff", "pull-up", "throughput",
-        "event log", "case duration", "activity", "variant", "kpi",
-        "filter", "domain_table", "rework", "bottleneck", "cycle time",
-        "lead time", "source", "target", "running_sum", "activation_count",
-        "process mining", "process query"
-    ]
-    is_write = any(w in p for w in write_kw)
-    is_pql   = any(w in p for w in pql_kw)
 
-    if is_write and is_pql:
+    p = prompt.lower()
+
+    debug_kw = [
+        "fix this query",
+        "debug this query",
+        "correct this pql",
+        "this query gives error",
+        "query not working"
+    ]
+
+    write_kw = [
+        "write",
+        "generate",
+        "create",
+        "build",
+        "pql for",
+        "query for",
+        "calculate",
+        "compute"
+    ]
+
+    pql_kw = [
+        "pql",
+        "celonis",
+        "pu_",
+        "datediff",
+        "process mining",
+        "event log",
+        "throughput",
+        "variant",
+        "activity",
+        "kpi",
+        "rework",
+        "cycle time"
+    ]
+
+    if any(d in p for d in debug_kw):
+        return "debug_pql"
+
+    if any(w in p for w in write_kw) and any(k in p for k in pql_kw):
         return "write_pql"
-    elif is_pql:
+
+    if any(k in p for k in pql_kw):
         return "explain_pql"
-    else:
-        return "general"
+
+    return "general"
 
 # =====================================
-# VECTOR STORE SEARCH
+# EXACT FUNCTION MATCH
 # =====================================
 
 def exact_function_match(query):
-    if not metadata:
-        return None
+
     tokens = re.findall(r'\bPU_[A-Z_]+\b', query.upper())
+
     for token in tokens:
+
         for item in metadata:
-            if token.lower() in item.get("url", "").lower():
+
+            url = item.get("url","").lower()
+
+            if token.lower() in url:
                 return item["text"]
+
     return None
 
+# =====================================
+# SEMANTIC SEARCH
+# =====================================
+
 def semantic_search(query, top_k=8):
-    if index is None or not metadata:
+
+    if index is None:
         return ""
+
     emb = EMBED_MODEL.encode([query])
-    _, I = index.search(np.array(emb), top_k)
-    return "\n\n---\n\n".join(
-        metadata[i]["text"] for i in I[0] if i < len(metadata)
-    )
+
+    D,I = index.search(np.array(emb), top_k)
+
+    results = []
+
+    for idx in I[0]:
+        results.append(metadata[idx]["text"])
+
+    return "\n\n".join(results)
+
+# =====================================
+# CONTEXT RETRIEVAL
+# =====================================
 
 def retrieve_context(prompt):
+
     exact = exact_function_match(prompt)
-    return f"[EXACT MATCH]\n\n{exact}" if exact else semantic_search(prompt)
+
+    if exact:
+        return exact
+
+    return semantic_search(prompt)
 
 # =====================================
 # BUILD FINAL PROMPT
 # =====================================
 
-def build_final_prompt(prompt, intent):
+def build_prompt(prompt, intent):
+
     if intent == "general":
         return prompt
 
     context = retrieve_context(prompt)
 
-    base = f"User Requirement:\n{prompt}\n"
-
-    if context.strip():
-        ctx_block = f"""
-Documentation Context (follow syntax strictly):
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-{context}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-"""
-    else:
-        ctx_block = "No documentation found. Use your expert PQL knowledge.\n\n"
-
     if intent == "write_pql":
-        return f"""TASK: Write a custom PQL query for the user's exact requirement.
 
-{ctx_block}{base}
-IMPORTANT:
-- Use the actual table/column names the user mentioned.
-- If they did not mention names, use clearly labelled placeholders like <CASE_TABLE>, <ACTIVITY_COLUMN>.
-- Write proper indented PQL. Do NOT write SQL.
-- Explain every line after the query.
+        return f"""
+Write a PQL query.
+
+Context
+{context}
+
+User Requirement
+{prompt}
+
+Rules
+• Use correct PQL syntax
+• Do not write SQL
 """
-    elif intent == "explain_pql":
-        return f"""TASK: Explain the PQL concept the user is asking about.
 
-{ctx_block}{base}"""
+    if intent == "debug_pql":
 
-    return prompt
+        return f"""
+Debug the following PQL query.
+
+User Query
+{prompt}
+
+Return:
+
+Corrected PQL Query
+
+Explain the mistake
+
+Explain the fix
+"""
+
+    if intent == "explain_pql":
+
+        return f"""
+Explain the following Celonis / PQL concept.
+
+Context
+{context}
+
+Question
+{prompt}
+"""
 
 # =====================================
 # SIDEBAR
 # =====================================
 
 with st.sidebar:
-    st.markdown("## ⚙️ Settings")
+
+    st.title("⚙️ Settings")
+
     st.session_state.mode = st.selectbox(
         "Response Mode",
-        ["Auto", "Always use docs", "LLM only"],
-        index=0
+        ["Auto","Always use docs","LLM only"]
     )
 
     st.markdown("---")
-    st.markdown("### 💬 Chat")
-    if st.button("🗑️ Clear Chat"):
+
+    if st.button("Clear Chat"):
         st.session_state.messages = []
         st.rerun()
 
     st.markdown("---")
-    st.markdown("### 📘 Quick PQL Examples")
+
+    st.markdown("### Examples")
+
     examples = [
         "Write a PQL query for average case duration",
-        "How does PU_AVG work in Celonis?",
-        "Write PQL to count cases per variant",
-        "PQL query to find rework activities",
-        "Calculate throughput time between two activities",
+        "Explain PU_AVG",
+        "Write PQL to detect rework",
+        "Fix this query PU_SUM DOMAIN_TABLE"
     ]
-    for ex in examples:
-        if st.button(ex, key=ex):
-            st.session_state.messages.append({"role": "user", "content": ex})
-            st.rerun()
 
-    st.markdown("---")
-    st.markdown(f"**Index:** {'✅ Loaded' if index is not None else '⚠️ LLM-only'}")
-    st.markdown(f"**Model:** `{MODEL_NAME}`")
+    for e in examples:
+        if st.button(e):
+            st.session_state.messages.append({"role":"user","content":e})
+            st.rerun()
 
 # =====================================
 # HEADER
 # =====================================
 
 st.title("🧠 Celonis Process Mining Copilot")
-st.markdown("*Powered by Divyansh · Ask anything — or say: \"Write a PQL query for...\"*")
+
+st.markdown("Ask anything about **PQL or Process Mining**")
+
 st.markdown("---")
 
 # =====================================
@@ -479,6 +365,7 @@ st.markdown("---")
 # =====================================
 
 for msg in st.session_state.messages:
+
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
@@ -486,43 +373,51 @@ for msg in st.session_state.messages:
 # CHAT INPUT
 # =====================================
 
-if prompt := st.chat_input("Ask a question or say: 'Write a PQL query for...'"):
+if prompt := st.chat_input("Ask a question..."):
 
-    st.session_state.messages.append({"role": "user", "content": prompt})
+    st.session_state.messages.append({"role":"user","content":prompt})
+
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Determine intent
     intent = detect_intent(prompt)
-    if st.session_state.mode == "Always use docs":
-        intent = "explain_pql" if intent == "general" else intent
-    elif st.session_state.mode == "LLM only":
+
+    if st.session_state.mode == "LLM only":
         intent = "general"
 
-    final_prompt = build_final_prompt(prompt, intent)
+    final_prompt = build_prompt(prompt, intent)
 
     history = [
-        {"role": m["role"], "content": m["content"]}
+        {"role":m["role"],"content":m["content"]}
         for m in st.session_state.messages[:-1]
     ]
 
     with st.chat_message("assistant"):
+
         with st.spinner("Thinking..."):
+
             try:
+
                 response = client.chat.completions.create(
+
                     model=MODEL_NAME,
+
                     messages=[
-                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role":"system","content":SYSTEM_PROMPT},
                         *history,
-                        {"role": "user", "content": final_prompt}
+                        {"role":"user","content":final_prompt}
                     ],
+
                     temperature=0.1,
-                    max_tokens=2500
+                    max_tokens=2000
                 )
+
                 reply = response.choices[0].message.content
+
             except Exception as e:
-                reply = f"❌ Groq API error: `{str(e)}`"
+
+                reply = f"API Error: {e}"
 
             st.markdown(reply)
 
-    st.session_state.messages.append({"role": "assistant", "content": reply})
+    st.session_state.messages.append({"role":"assistant","content":reply})
