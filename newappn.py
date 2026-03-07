@@ -18,7 +18,7 @@ st.set_page_config(
 )
 
 # =====================================
-# BACKGROUND + FULL CSS FIX
+# FULL CSS — ALL WHITE AREAS FIXED
 # =====================================
 
 def set_background(image_file):
@@ -26,138 +26,204 @@ def set_background(image_file):
         with open(image_file, "rb") as f:
             encoded = base64.b64encode(f.read()).decode()
         bg_style = f"""
-        background:
-            linear-gradient(rgba(0,0,0,0.85), rgba(0,0,0,0.85)),
-            url("data:image/png;base64,{encoded}");
-        background-size: cover;
-        background-position: center;
-        background-attachment: fixed;
+            background:
+                linear-gradient(rgba(0,0,0,0.83), rgba(0,0,0,0.83)),
+                url("data:image/png;base64,{encoded}");
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
         """
     except FileNotFoundError:
-        bg_style = "background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 50%, #16213e 100%);"
+        bg_style = "background: linear-gradient(135deg, #0d0d1a 0%, #141428 50%, #0f1a2e 100%);"
 
-    page_bg = f"""
+    css = f"""
     <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap');
 
-    /* ── App background ── */
+    /* ─── Base app ─── */
     .stApp {{
         {bg_style}
     }}
-    .main {{ background-color: transparent !important; }}
-    section.main > div {{ background-color: transparent !important; }}
-    .block-container {{ padding-top: 2rem; padding-bottom: 0rem; }}
-
-    /* ── Global text ── */
-    html, body, [class*="css"], h1, h2, h3, h4, h5, h6,
-    p, div, span, label, li, td, th {{
-        color: #e8e8f0 !important;
+    .main, section.main > div, .block-container {{
+        background-color: transparent !important;
+    }}
+    .block-container {{
+        padding-top: 2rem !important;
+        padding-bottom: 1rem !important;
     }}
 
-    /* ── Chat bubbles ── */
+    /* ─── KILL ALL WHITE BACKGROUNDS globally ─── */
+    *, *::before, *::after {{
+        box-sizing: border-box;
+    }}
+
+    /* Default text */
+    html, body {{
+        background-color: #0d0d1a !important;
+        color: #e2e2f0 !important;
+    }}
+
+    /* Every div/span/p text */
+    .stMarkdown, .stMarkdown p, .stMarkdown li,
+    .stMarkdown span, .stMarkdown div,
+    p, span, label, li, td, th {{
+        color: #e2e2f0 !important;
+    }}
+
+    h1, h2, h3, h4, h5, h6 {{
+        color: #ffffff !important;
+    }}
+
+    strong, b {{
+        color: #a78bfa !important;
+    }}
+
+    em, i {{
+        color: #94a3b8 !important;
+    }}
+
+    /* ─── Chat messages ─── */
     .stChatMessage {{
-        background-color: rgba(20, 20, 35, 0.88) !important;
-        border: 1px solid rgba(255,255,255,0.08);
-        border-radius: 12px;
-        padding: 14px;
+        background-color: rgba(18, 18, 32, 0.92) !important;
+        border: 1px solid rgba(255,255,255,0.07) !important;
+        border-radius: 14px !important;
+        padding: 16px !important;
+        margin-bottom: 8px !important;
     }}
 
-    /* ══════════════════════════════════════
-       CODE BLOCKS — FULL DARK FIX
-       ══════════════════════════════════════ */
-
-    /* Inline code */
+    /* ─── CODE BLOCKS — DARK FORCED ─── */
+    pre {{
+        background-color: #13131f !important;
+        border: 1px solid rgba(139,92,246,0.3) !important;
+        border-radius: 10px !important;
+        padding: 16px !important;
+        overflow-x: auto !important;
+    }}
+    pre code {{
+        background-color: transparent !important;
+        color: #c9d1d9 !important;
+        font-family: 'JetBrains Mono', 'Fira Code', monospace !important;
+        font-size: 0.85rem !important;
+        white-space: pre !important;
+        line-height: 1.6 !important;
+    }}
     code {{
-        background-color: #1e1e2e !important;
-        color: #cdd6f4 !important;
+        background-color: #1e1e35 !important;
+        color: #c9d1d9 !important;
         border-radius: 4px !important;
         padding: 2px 6px !important;
-        font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace !important;
+        font-family: 'JetBrains Mono', 'Fira Code', monospace !important;
+        font-size: 0.85rem !important;
     }}
-
-    /* Fenced code block outer wrapper */
-    .stCodeBlock,
-    div[data-testid="stCode"],
-    div[data-testid="stMarkdownContainer"] pre,
-    .stMarkdown pre,
-    pre {{
-        background-color: #1e1e2e !important;
-        border: 1px solid rgba(120, 120, 220, 0.35) !important;
-        border-radius: 8px !important;
-        padding: 14px 16px !important;
+    .stCodeBlock {{
+        background-color: #13131f !important;
+        border: 1px solid rgba(139,92,246,0.3) !important;
+        border-radius: 10px !important;
     }}
-
-    /* Code text inside fenced block */
-    pre code,
     .stCodeBlock code,
-    div[data-testid="stCode"] code,
-    div[data-testid="stMarkdownContainer"] pre code {{
+    div[data-testid="stCode"] code {{
         background-color: transparent !important;
-        color: #cdd6f4 !important;
-        font-size: 0.87rem !important;
-        white-space: pre !important;
-        font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace !important;
+        color: #c9d1d9 !important;
+        font-family: 'JetBrains Mono', monospace !important;
+    }}
+    div[data-testid="stCode"] {{
+        background-color: #13131f !important;
     }}
 
-    /* Syntax highlight tokens — keep readable on dark bg */
-    .stCodeBlock .keyword  {{ color: #cba6f7 !important; }}
-    .stCodeBlock .string   {{ color: #a6e3a1 !important; }}
-    .stCodeBlock .number   {{ color: #fab387 !important; }}
-    .stCodeBlock .comment  {{ color: #6c7086 !important; font-style: italic; }}
-
-    /* Copy button */
-    .stCodeBlock button,
-    div[data-testid="stCode"] button {{
-        background-color: rgba(100, 100, 200, 0.35) !important;
-        color: #cdd6f4 !important;
-        border: 1px solid rgba(255,255,255,0.1) !important;
-    }}
-
-    /* ── Chat input ── */
+    /* ─── CHAT INPUT — WHITE BG FIX ─── */
     div[data-testid="stChatInput"] {{
-        background-color: rgba(20, 20, 30, 0.95) !important;
-        border-radius: 12px !important;
-        border: 1px solid rgba(255,255,255,0.1) !important;
+        background-color: #13131f !important;
+        border: 1px solid rgba(139,92,246,0.4) !important;
+        border-radius: 14px !important;
+    }}
+    div[data-testid="stChatInput"] > div {{
+        background-color: transparent !important;
     }}
     div[data-testid="stChatInput"] textarea {{
-        color: #e8e8f0 !important;
         background-color: transparent !important;
+        color: #e2e2f0 !important;
+        caret-color: #a78bfa !important;
+    }}
+    div[data-testid="stChatInput"] textarea::placeholder {{
+        color: #555577 !important;
+    }}
+    /* The send button area */
+    div[data-testid="stChatInput"] button {{
+        background-color: rgba(139,92,246,0.3) !important;
+        color: white !important;
+        border-radius: 8px !important;
     }}
 
-    /* ── Sidebar ── */
+    /* ─── Sidebar ─── */
     section[data-testid="stSidebar"] {{
-        background-color: rgba(12, 12, 22, 0.97) !important;
+        background-color: #0b0b18 !important;
+        border-right: 1px solid rgba(255,255,255,0.06) !important;
     }}
-    section[data-testid="stSidebar"] button {{
-        background-color: rgba(40, 40, 70, 0.8) !important;
-        color: #e8e8f0 !important;
-        border: 1px solid rgba(255,255,255,0.1) !important;
-        border-radius: 8px !important;
+    section[data-testid="stSidebar"] * {{
+        color: #e2e2f0 !important;
+    }}
+    section[data-testid="stSidebar"] .stButton button {{
+        background-color: rgba(30, 30, 55, 0.9) !important;
+        color: #e2e2f0 !important;
+        border: 1px solid rgba(139,92,246,0.25) !important;
+        border-radius: 9px !important;
         text-align: left !important;
         width: 100% !important;
-        margin-bottom: 4px !important;
+        margin-bottom: 5px !important;
+        font-size: 0.82rem !important;
+        padding: 8px 12px !important;
+        transition: all 0.2s ease;
     }}
-    section[data-testid="stSidebar"] button:hover {{
-        background-color: rgba(80, 80, 160, 0.6) !important;
+    section[data-testid="stSidebar"] .stButton button:hover {{
+        background-color: rgba(139,92,246,0.25) !important;
+        border-color: rgba(139,92,246,0.6) !important;
     }}
 
-    /* ── Selectbox ── */
-    div[data-testid="stSelectbox"] > div {{
-        background-color: rgba(30, 30, 50, 0.9) !important;
-        color: #e8e8f0 !important;
+    /* ─── Selectbox ─── */
+    div[data-testid="stSelectbox"] > div > div {{
+        background-color: #1a1a2e !important;
+        color: #e2e2f0 !important;
+        border: 1px solid rgba(139,92,246,0.3) !important;
+        border-radius: 8px !important;
+    }}
+    div[data-testid="stSelectbox"] svg {{
+        fill: #a78bfa !important;
+    }}
+
+    /* Dropdown options */
+    ul[data-testid="stSelectboxVirtualDropdown"] {{
+        background-color: #1a1a2e !important;
+        border: 1px solid rgba(139,92,246,0.3) !important;
+    }}
+    ul[data-testid="stSelectboxVirtualDropdown"] li {{
+        color: #e2e2f0 !important;
+    }}
+    ul[data-testid="stSelectboxVirtualDropdown"] li:hover {{
+        background-color: rgba(139,92,246,0.2) !important;
+    }}
+
+    /* ─── Horizontal divider ─── */
+    hr {{
+        border-color: rgba(255,255,255,0.08) !important;
+    }}
+
+    /* ─── Warning/info boxes ─── */
+    div[data-testid="stAlert"] {{
+        background-color: rgba(30,30,60,0.8) !important;
+        border: 1px solid rgba(139,92,246,0.3) !important;
+        color: #e2e2f0 !important;
         border-radius: 8px !important;
     }}
 
-    /* ── Bold text accent color ── */
-    strong {{ color: #a0a0ff !important; }}
-
-    /* ── Scrollbar ── */
-    ::-webkit-scrollbar {{ width: 6px; }}
-    ::-webkit-scrollbar-track {{ background: #0f0f1a; }}
-    ::-webkit-scrollbar-thumb {{ background: #3a3a6a; border-radius: 3px; }}
+    /* ─── Scrollbar ─── */
+    ::-webkit-scrollbar {{ width: 5px; height: 5px; }}
+    ::-webkit-scrollbar-track {{ background: #0d0d1a; }}
+    ::-webkit-scrollbar-thumb {{ background: #3a3a6a; border-radius: 4px; }}
+    ::-webkit-scrollbar-thumb:hover {{ background: #6060aa; }}
 
     </style>
     """
-    st.markdown(page_bg, unsafe_allow_html=True)
+    st.markdown(css, unsafe_allow_html=True)
 
 set_background("background.png")
 
@@ -170,54 +236,62 @@ client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 EMBED_MODEL = SentenceTransformer("all-MiniLM-L6-v2")
 
 # =====================================
-# SYSTEM PROMPT
+# SYSTEM PROMPT — v3 UPGRADED
 # =====================================
 
 SYSTEM_PROMPT = """
-You are a Senior Celonis Process Mining Consultant AI with deep expertise in PQL (Process Query Language).
+You are an expert Celonis Process Mining Consultant AI specialising in PQL (Process Query Language).
 
-CORE CAPABILITIES:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CAPABILITIES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-1. ANSWER process mining conceptual questions clearly with real examples.
-2. EXPLAIN any PQL function using provided documentation context.
-3. WRITE CUSTOM PQL QUERIES when the user asks — this is a KEY capability.
-   - Understand the user's business requirement.
-   - Map it to correct PQL syntax.
-   - Use Pull-Up functions (PU_AVG, PU_COUNT, PU_MAX, PU_MIN, PU_SUM, PU_MEDIAN, PU_LAST, PU_FIRST, etc.) correctly.
-   - Apply FILTER, DOMAIN_TABLE, SOURCE, TARGET correctly.
-   - Build multi-step KPI formulas if needed.
-   - Always explain what the query does after writing it.
+1. WRITE CUSTOM PQL QUERIES based on what the user describes.
+   - Extract actual table names, column names, and conditions from the user's question.
+   - Do NOT use placeholder names like ORDER_TABLE or ORDER_VALUE unless the user said them.
+   - If the user gives you real table/column names, use those EXACTLY.
+   - If the user does NOT provide table/column names, ask them first OR write the query
+     with clearly labelled placeholders like <YOUR_TABLE>, <YOUR_COLUMN> and tell them to replace.
 
-STRICT PQL RULES:
+2. EXPLAIN PQL functions with syntax and real examples.
 
-- Always use PQL syntax — NEVER SQL syntax.
-- Preserve exact PQL operators: FILTER, DOMAIN_TABLE, SOURCE, TARGET, RUNNING_SUM, etc.
-- Use double quotes for column names: "TABLE"."COLUMN"
-- Pull-Up functions format: PU_FUNCTION ( DOMAIN_TABLE, COLUMN, FILTER condition )
-- For date differences use: DATEDIFF ( 'unit', start, end )
-- Case expressions: CASE WHEN ... THEN ... ELSE ... END
-- If documentation context is provided, follow it strictly.
-- If not in docs but user asks to write a query, use your PQL expertise to write it correctly.
-- Never use SQL keywords: SELECT, FROM, WHERE, GROUP BY, JOIN
-- Never simplify PQL into SQL-like syntax
-- Never invent function names
+3. ANSWER process mining conceptual questions.
 
-RESPONSE FORMAT FOR QUERIES:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PQL SYNTAX RULES — STRICT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-When writing a PQL query, always structure your response like this:
+✅ Column reference:       "TABLE_NAME"."COLUMN_NAME"
+✅ Pull-Up syntax:         PU_FUNCTION ( DOMAIN_TABLE ( "TABLE" ), "TABLE"."COLUMN", FILTER "TABLE"."COL" = 'value' )
+✅ Date difference:        DATEDIFF ( 'day', "TABLE"."START_DATE", "TABLE"."END_DATE" )
+✅ Case expression:        CASE WHEN condition THEN value ELSE other END
+✅ Source/Target:          SOURCE ( "TABLE"."ACTIVITY_COL", EXCLUDE DUPLICATE ACTIVITIES ) = 'ActivityName'
+✅ Running aggregation:    RUNNING_SUM ( "TABLE"."COLUMN" )
+✅ Rework detection:       ACTIVATION_COUNT ( "TABLE"."ACTIVITY_COL" ) > 1
 
-**PQL Query:**
+❌ NEVER use: SELECT, FROM, WHERE, GROUP BY, JOIN, AS, COUNT(*), SUM()
+❌ NEVER write SQL
+❌ NEVER invent function names
+❌ NEVER use generic placeholders without telling the user to replace them
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+RESPONSE FORMAT — ALWAYS USE THIS FOR QUERIES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**📌 PQL Query:**
 ```
-<your PQL code here>
+<PQL code here — properly indented>
 ```
 
-**Explanation:**
-<step-by-step explanation of what the query does>
+**📖 What this does:**
+<plain English explanation, line by line>
 
-**Usage Note:**
-<any important tips or variations>
+**💡 Note:**
+<tips, edge cases, or what to replace if placeholders used>
 
-PRIORITY: Technical Accuracy > Completeness > Simplicity
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PRIORITY: Accuracy > Context-Awareness > Simplicity
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 """
 
 # =====================================
@@ -232,7 +306,7 @@ def load_vector_store():
             metadata = pickle.load(f)
         return index, metadata
     except Exception as e:
-        st.warning(f"⚠️ Vector store not loaded: {e}. Running in LLM-only mode.")
+        st.warning(f"⚠️ Vector store not loaded ({e}). Running in LLM-only mode.")
         return None, []
 
 index, metadata = load_vector_store()
@@ -243,7 +317,6 @@ index, metadata = load_vector_store()
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
-
 if "mode" not in st.session_state:
     st.session_state.mode = "Auto"
 
@@ -252,70 +325,56 @@ if "mode" not in st.session_state:
 # =====================================
 
 def detect_intent(prompt):
-    prompt_lower = prompt.lower()
-
-    write_keywords = [
-        "write", "generate", "create", "build", "give me", "make",
-        "how to write", "query for", "pql for", "calculate", "compute",
-        "show me query", "example query", "can you write", "can you create"
+    p = prompt.lower()
+    write_kw = [
+        "write", "generate", "create", "build", "give me", "make a",
+        "query for", "pql for", "calculate", "compute", "show query",
+        "can you write", "can you create", "help me write", "i need a query",
+        "i want a query", "example query", "how would i"
     ]
-    pql_keywords = [
-        "celonis", "pql", "pu_", "datediff", "process query",
-        "pull-up", "throughput", "event log", "case duration",
-        "activity", "variant", "process", "kpi", "filter", "domain_table",
-        "rework", "bottleneck", "cycle time", "lead time"
+    pql_kw = [
+        "celonis", "pql", "pu_", "datediff", "pull-up", "throughput",
+        "event log", "case duration", "activity", "variant", "kpi",
+        "filter", "domain_table", "rework", "bottleneck", "cycle time",
+        "lead time", "source", "target", "running_sum", "activation_count",
+        "process mining", "process query"
     ]
+    is_write = any(w in p for w in write_kw)
+    is_pql   = any(w in p for w in pql_kw)
 
-    is_write_request = any(w in prompt_lower for w in write_keywords)
-    is_pql_topic = any(w in prompt_lower for w in pql_keywords)
-
-    if is_write_request and is_pql_topic:
+    if is_write and is_pql:
         return "write_pql"
-    elif is_pql_topic:
+    elif is_pql:
         return "explain_pql"
     else:
         return "general"
 
 # =====================================
-# EXACT FUNCTION ROUTING
+# VECTOR STORE SEARCH
 # =====================================
 
 def exact_function_match(query):
     if not metadata:
         return None
-    query_upper = query.upper()
-    tokens = re.findall(r'\bPU_[A-Z_]+\b', query_upper)
+    tokens = re.findall(r'\bPU_[A-Z_]+\b', query.upper())
     for token in tokens:
         for item in metadata:
-            url = item.get("url", "").lower()
-            if token.lower() in url:
+            if token.lower() in item.get("url", "").lower():
                 return item["text"]
     return None
-
-# =====================================
-# SEMANTIC SEARCH
-# =====================================
 
 def semantic_search(query, top_k=8):
     if index is None or not metadata:
         return ""
-    query_embedding = EMBED_MODEL.encode([query])
-    D, I = index.search(np.array(query_embedding), top_k)
-    results = []
-    for idx in I[0]:
-        if idx < len(metadata):
-            results.append(metadata[idx]["text"])
-    return "\n\n---\n\n".join(results)
-
-# =====================================
-# CONTEXT PIPELINE
-# =====================================
+    emb = EMBED_MODEL.encode([query])
+    _, I = index.search(np.array(emb), top_k)
+    return "\n\n---\n\n".join(
+        metadata[i]["text"] for i in I[0] if i < len(metadata)
+    )
 
 def retrieve_context(prompt):
-    exact_match = exact_function_match(prompt)
-    if exact_match:
-        return f"[EXACT MATCH FOUND]\n\n{exact_match}"
-    return semantic_search(prompt)
+    exact = exact_function_match(prompt)
+    return f"[EXACT MATCH]\n\n{exact}" if exact else semantic_search(prompt)
 
 # =====================================
 # BUILD FINAL PROMPT
@@ -327,53 +386,33 @@ def build_final_prompt(prompt, intent):
 
     context = retrieve_context(prompt)
 
+    base = f"User Requirement:\n{prompt}\n"
+
+    if context.strip():
+        ctx_block = f"""
+Documentation Context (follow syntax strictly):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+{context}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+"""
+    else:
+        ctx_block = "No documentation found. Use your expert PQL knowledge.\n\n"
+
     if intent == "write_pql":
-        if context.strip():
-            return f"""
-TASK: Write a custom PQL query based on the user's requirement.
+        return f"""TASK: Write a custom PQL query for the user's exact requirement.
 
-Documentation Context (use as reference for syntax):
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-{context}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-User Requirement:
-{prompt}
-
-Instructions:
-- Write a complete, working PQL query.
-- Follow exact PQL syntax from the documentation above.
-- Explain the query step by step after writing it.
+{ctx_block}{base}
+IMPORTANT:
+- Use the actual table/column names the user mentioned.
+- If they did not mention names, use clearly labelled placeholders like <CASE_TABLE>, <ACTIVITY_COLUMN>.
+- Write proper indented PQL. Do NOT write SQL.
+- Explain every line after the query.
 """
-        else:
-            return f"""
-TASK: Write a custom PQL query based on the user's requirement.
-
-No documentation context found. Use your expert PQL knowledge.
-
-User Requirement:
-{prompt}
-
-Instructions:
-- Write a complete, working PQL query using correct PQL syntax.
-- Explain the query step by step after writing it.
-"""
-
     elif intent == "explain_pql":
-        if context.strip():
-            return f"""
-TASK: Explain the PQL concept or function the user is asking about.
+        return f"""TASK: Explain the PQL concept the user is asking about.
 
-Documentation Context:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-{context}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-User Question:
-{prompt}
-"""
-        else:
-            return prompt
+{ctx_block}{base}"""
 
     return prompt
 
@@ -383,7 +422,6 @@ User Question:
 
 with st.sidebar:
     st.markdown("## ⚙️ Settings")
-
     st.session_state.mode = st.selectbox(
         "Response Mode",
         ["Auto", "Always use docs", "LLM only"],
@@ -411,8 +449,7 @@ with st.sidebar:
             st.rerun()
 
     st.markdown("---")
-    index_status = "✅ Loaded" if index is not None else "⚠️ LLM-only mode"
-    st.markdown(f"**Vector Index:** {index_status}")
+    st.markdown(f"**Index:** {'✅ Loaded' if index is not None else '⚠️ LLM-only'}")
     st.markdown(f"**Model:** `{MODEL_NAME}`")
 
 # =====================================
@@ -420,16 +457,16 @@ with st.sidebar:
 # =====================================
 
 st.title("🧠 Celonis Process Mining Copilot")
-st.markdown("*Powered by Divyansh · Ask anything about PQL or Process Mining*")
+st.markdown("*Powered by Divyansh · Ask anything — or say: \"Write a PQL query for...\"*")
 st.markdown("---")
 
 # =====================================
-# DISPLAY CHAT HISTORY
+# CHAT HISTORY
 # =====================================
 
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["content"])
 
 # =====================================
 # CHAT INPUT
@@ -441,8 +478,8 @@ if prompt := st.chat_input("Ask a question or say: 'Write a PQL query for...'"):
     with st.chat_message("user"):
         st.markdown(prompt)
 
+    # Determine intent
     intent = detect_intent(prompt)
-
     if st.session_state.mode == "Always use docs":
         intent = "explain_pql" if intent == "general" else intent
     elif st.session_state.mode == "LLM only":
@@ -456,7 +493,7 @@ if prompt := st.chat_input("Ask a question or say: 'Write a PQL query for...'"):
     ]
 
     with st.chat_message("assistant"):
-        with st.spinner("Analyzing..."):
+        with st.spinner("Thinking..."):
             try:
                 response = client.chat.completions.create(
                     model=MODEL_NAME,
@@ -466,11 +503,11 @@ if prompt := st.chat_input("Ask a question or say: 'Write a PQL query for...'"):
                         {"role": "user", "content": final_prompt}
                     ],
                     temperature=0.1,
-                    max_tokens=2000
+                    max_tokens=2500
                 )
                 reply = response.choices[0].message.content
             except Exception as e:
-                reply = f"❌ Error calling Groq API: `{str(e)}`"
+                reply = f"❌ Groq API error: `{str(e)}`"
 
             st.markdown(reply)
 
