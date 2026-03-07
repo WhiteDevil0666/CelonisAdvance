@@ -315,10 +315,13 @@ Respond ONLY in this exact format:
 @st.cache_resource
 def load_vector_store():
     try:
-        index = faiss.read_index("pql_faiss.index")
-        with open("pql_metadata.pkl", "rb") as f:
+        index = faiss.read_index("pql_knowledge.index")
+
+        with open("pql_knowledge.pkl", "rb") as f:
             metadata = pickle.load(f)
+
         return index, metadata
+
     except Exception as e:
         st.warning(f"⚠️ Knowledge base not found ({e}). Running in LLM-only mode.")
         return None, []
@@ -823,3 +826,4 @@ if prompt := st.chat_input("Ask a PQL question or say: 'Write a PQL query for...
             st.markdown(final_reply)
 
     st.session_state.messages.append({"role": "assistant", "content": final_reply})
+
