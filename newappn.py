@@ -130,28 +130,42 @@ def set_background(image_file):
         background-color: #13131f !important;
     }}
 
-    /* ─── CHAT INPUT — WHITE BG FIX ─── */
-    div[data-testid="stChatInput"] {{
+    /* ─── CHAT INPUT — NUCLEAR WHITE BG FIX ─── */
+    div[data-testid="stChatInput"],
+    div[data-testid="stChatInput"] > div,
+    div[data-testid="stChatInput"] > div > div,
+    div[data-testid="stChatInput"] > div > div > div {{
         background-color: #13131f !important;
-        border: 1px solid rgba(139,92,246,0.4) !important;
         border-radius: 14px !important;
     }}
-    div[data-testid="stChatInput"] > div {{
-        background-color: transparent !important;
+    div[data-testid="stChatInput"] {{
+        border: 1px solid rgba(139,92,246,0.45) !important;
     }}
-    div[data-testid="stChatInput"] textarea {{
-        background-color: transparent !important;
+    /* The actual textarea element */
+    div[data-testid="stChatInput"] textarea,
+    div[data-testid="stChatInput"] textarea:focus,
+    div[data-testid="stChatInput"] textarea:active,
+    div[data-testid="stChatInput"] textarea:hover {{
+        background-color: #13131f !important;
+        background: #13131f !important;
         color: #e2e2f0 !important;
         caret-color: #a78bfa !important;
+        border: none !important;
+        outline: none !important;
+        box-shadow: none !important;
+        -webkit-box-shadow: none !important;
     }}
     div[data-testid="stChatInput"] textarea::placeholder {{
-        color: #555577 !important;
+        color: #6060aa !important;
+        opacity: 1 !important;
     }}
-    /* The send button area */
-    div[data-testid="stChatInput"] button {{
-        background-color: rgba(139,92,246,0.3) !important;
+    /* Send button */
+    div[data-testid="stChatInput"] button,
+    div[data-testid="stChatInput"] button:hover {{
+        background-color: rgba(139,92,246,0.35) !important;
         color: white !important;
         border-radius: 8px !important;
+        border: none !important;
     }}
 
     /* ─── Sidebar ─── */
