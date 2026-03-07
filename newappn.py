@@ -22,6 +22,7 @@ st.set_page_config(
 # =====================================
 
 def set_background(image_file):
+
     with open(image_file, "rb") as f:
         encoded = base64.b64encode(f.read()).decode()
 
@@ -75,7 +76,6 @@ def set_background(image_file):
 
     st.markdown(page_bg, unsafe_allow_html=True)
 
-
 set_background("background.png")
 
 # =====================================
@@ -83,7 +83,9 @@ set_background("background.png")
 # =====================================
 
 MODEL_NAME = "llama-3.3-70b-versatile"
+
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
+
 EMBED_MODEL = SentenceTransformer("all-MiniLM-L6-v2")
 
 # =====================================
@@ -93,15 +95,14 @@ EMBED_MODEL = SentenceTransformer("all-MiniLM-L6-v2")
 SYSTEM_PROMPT = """
 You are a Senior Celonis Process Mining Consultant AI.
 
-STRICT RULES:
+Rules:
 
-1. Use ONLY the provided documentation context.
-2. Preserve official Celonis syntax EXACTLY.
+1. Use ONLY Celonis documentation provided in context.
+2. Preserve PQL syntax exactly.
 3. Never convert PQL to SQL.
-4. Never invent functions or syntax.
-5. If information is missing, say:
+4. Never invent functions.
+5. If documentation does not contain the answer say:
    "Not found in official Celonis documentation."
-6. Prioritize accuracy over creativity.
 """
 
 # =====================================
@@ -110,17 +111,21 @@ STRICT RULES:
 
 @st.cache_resource
 def load_vector_store():
+
     try:
+
         index = faiss.read_index("pql_faiss.index")
 
-        with open("pql_metadata.pkl", "rb") as f:
+        with open("pql_metadata.pkl","rb") as f:
+
             metadata = pickle.load(f)
 
         return index, metadata
 
-    except Exception as e:
+    except:
 
-        st.warning("Vector store could not be loaded.")
+        st.warning("Vector store not found")
+
         return None, []
 
 
@@ -131,6 +136,7 @@ index, metadata = load_vector_store()
 # =====================================
 
 if "messages" not in st.session_state:
+
     st.session_state.messages = []
 
 # =====================================
@@ -141,31 +147,44 @@ def is_celonis_query(prompt):
 
     keywords = [
         "celonis","pql","pu_","datediff",
-        "process query language","pull-up",
-        "throughput","event log"
+        "pull-up","throughput","event log"
     ]
 
     return any(word in prompt.lower() for word in keywords)
 
 # =====================================
-# EXACT FUNCTION MATCH
+# DETECT PQL FUNCTION
+# =====================================
+
+def detect_pql_function(query):
+
+    pattern = r"\b(PU_[A-Z_]+|DATEDIFF|RUNNING_SUM|ACTIVATION_COUNT)\b"
+
+    match = re.search(pattern, query.upper())
+
+    if match:
+        return match.group(1)
+
+    return None
+
+# =====================================
+# EXACT FUNCTION RETRIEVAL
 # =====================================
 
 def exact_function_match(query):
 
-    query_upper = query.upper()
+    function_name = detect_pql_function(query)
+
+    if not function_name:
+        return None
 
     for item in metadata:
 
         text = item.get("text","").upper()
 
-        funcs = re.findall(r'PU_[A-Z_]+', query_upper)
+        if function_name in text:
 
-        for f in funcs:
-
-            if f in text:
-
-                return item["text"]
+            return item["text"]
 
     return None
 
@@ -176,6 +195,7 @@ def exact_function_match(query):
 def semantic_search(query, top_k=5):
 
     if index is None:
+
         return ""
 
     query_embedding = EMBED_MODEL.encode([query])
@@ -202,18 +222,26 @@ def semantic_search(query, top_k=5):
 
 def retrieve_context(prompt):
 
-    exact = exact_function_match(prompt)
+    function_context = exact_function_match(prompt)
 
-    semantic = semantic_search(prompt)
+    semantic_context = semantic_search(prompt)
 
-    if exact:
+    if function_context:
 
-        return exact + "\n\n" + semantic
+        return f"""
+FUNCTION DOCUMENTATION
+----------------------
+{function_context}
 
-    return semantic
+ADDITIONAL DOCUMENTATION
+------------------------
+{semantic_context}
+"""
+
+    return semantic_context
 
 # =====================================
-# UI HEADER
+# HEADER
 # =====================================
 
 st.title("🧠 Process Mining Copilot (Celonis)")
@@ -235,7 +263,10 @@ for message in st.session_state.messages:
 
 if prompt := st.chat_input("Ask your question..."):
 
-    st.session_state.messages.append({"role": "user", "content": prompt})
+    st.session_state.messages.append({
+        "role":"user",
+        "content":prompt
+    })
 
     with st.chat_message("user"):
         st.markdown(prompt)
@@ -245,21 +276,26 @@ if prompt := st.chat_input("Ask your question..."):
         context = retrieve_context(prompt)
 
         final_prompt = f"""
-You MUST answer using ONLY the documentation below.
+You MUST answer using ONLY the Celonis documentation below.
 
-=====================
-OFFICIAL DOCUMENTATION
-=====================
+==============================
+OFFICIAL CELOINIS DOCUMENTATION
+==============================
 {context}
 
-=====================
+==============================
 USER QUESTION
-=====================
+==============================
 {prompt}
 
-If the answer is not present in the documentation respond exactly with:
+Rules:
 
-Not found in official Celonis documentation.
+1. Preserve PQL syntax exactly.
+2. Do not convert PQL to SQL.
+3. Do not invent functions.
+4. If documentation does not contain the answer say:
+
+"Not found in official Celonis documentation."
 """
 
     else:
@@ -273,9 +309,9 @@ Not found in official Celonis documentation.
             response = client.chat.completions.create(
                 model=MODEL_NAME,
                 messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role":"system","content":SYSTEM_PROMPT},
                     *st.session_state.messages[:-1],
-                    {"role": "user", "content": final_prompt}
+                    {"role":"user","content":final_prompt}
                 ],
                 temperature=0.1,
                 max_tokens=1500
@@ -284,13 +320,14 @@ Not found in official Celonis documentation.
             reply = response.choices[0].message.content
 
             # =====================================
-            # GUARDRAIL FOR HALLUCINATED FUNCTIONS
+            # GUARDRAIL AGAINST FAKE FUNCTIONS
             # =====================================
 
             known_functions = [
-                "PU_SUM","PU_AVG","PU_MIN","PU_MAX","PU_FIRST",
-                "PU_LAST","PU_COUNT","PU_COUNT_DISTINCT",
-                "PU_MEDIAN","PU_STDEV"
+                "PU_SUM","PU_AVG","PU_MIN","PU_MAX",
+                "PU_FIRST","PU_LAST","PU_COUNT",
+                "PU_COUNT_DISTINCT","PU_MEDIAN",
+                "PU_STDEV"
             ]
 
             detected = re.findall(r'PU_[A-Z_]+', reply)
@@ -303,4 +340,7 @@ Not found in official Celonis documentation.
 
             st.markdown(reply)
 
-    st.session_state.messages.append({"role": "assistant", "content": reply})
+    st.session_state.messages.append({
+        "role":"assistant",
+        "content":reply
+    })
