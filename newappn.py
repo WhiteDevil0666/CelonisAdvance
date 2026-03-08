@@ -80,20 +80,25 @@ You are a Senior Celonis Process Mining Consultant AI.
 
 Rules:
 
-1. Only generate Celonis PQL.
+1. Use ONLY Celonis PQL.
 2. Never generate SQL.
-3. Celonis joins are defined in the data model.
-4. Do NOT write SQL joins.
-5. Use correct column syntax:
+3. Celonis relationships exist in the data model.
+4. Never write SQL joins.
+5. Column syntax must be:
 
 "TABLE"."COLUMN"
 
-6. Use only official Celonis PQL functions.
-7. If information not found in documentation say:
+6. Always show correct PQL syntax when explaining functions.
+7. If the user asks about a function:
+   - Explain it clearly
+   - Show correct syntax
+   - Provide a real example query.
+
+If information is not found in documentation say:
 
 "Not found in official Celonis documentation."
 
-Return answers structured like:
+Always structure answers as:
 
 📌 PQL Query
 
@@ -103,13 +108,13 @@ Return answers structured like:
 
 <explanation>
 
-💡 Note
+💡 Example
 
-<notes>
+<example query>
 """
 
 # =====================================================
-# LOAD VECTOR STORE
+# LOAD VECTOR DATABASE
 # =====================================================
 
 @st.cache_resource
@@ -127,12 +132,14 @@ def load_vector_store():
 
     except:
 
+        st.warning("Vector database not found")
+
         return None,[]
 
 index,metadata = load_vector_store()
 
 # =====================================================
-# SESSION STATE
+# SESSION MEMORY
 # =====================================================
 
 if "messages" not in st.session_state:
@@ -143,11 +150,11 @@ if "messages" not in st.session_state:
 # FUNCTION DETECTION
 # =====================================================
 
-def detect_pql_function(query):
+def detect_pql_function(prompt):
 
-    pattern = r"\b(PU_[A-Z_]+|DATEDIFF|RUNNING_SUM|ACTIVATION_COUNT)\b"
+    pattern = r"\b(PU_[A-Z_]+|DATEDIFF|RUNNING_SUM|ACTIVATION_COUNT|DOMAIN_TABLE|BIND)\b"
 
-    match = re.search(pattern,query.upper())
+    match = re.search(pattern,prompt.upper())
 
     if match:
 
@@ -156,12 +163,12 @@ def detect_pql_function(query):
     return None
 
 # =====================================================
-# EXACT FUNCTION RETRIEVAL
+# FUNCTION DOCUMENTATION RETRIEVAL
 # =====================================================
 
-def retrieve_function_doc(query):
+def retrieve_function_doc(prompt):
 
-    function = detect_pql_function(query)
+    function = detect_pql_function(prompt)
 
     if not function:
 
@@ -179,13 +186,13 @@ def retrieve_function_doc(query):
 # SEMANTIC SEARCH
 # =====================================================
 
-def semantic_search(query,top_k=5):
+def semantic_search(prompt,top_k=5):
 
     if index is None:
 
         return ""
 
-    embedding = EMBED_MODEL.encode([query])
+    embedding = EMBED_MODEL.encode([prompt])
 
     embedding = np.array(embedding).astype("float32")
 
@@ -204,21 +211,21 @@ def semantic_search(query,top_k=5):
     return "\n\n".join(results)
 
 # =====================================================
-# HYBRID RETRIEVAL
+# CONTEXT PIPELINE
 # =====================================================
 
 def retrieve_context(prompt):
 
-    func_doc = retrieve_function_doc(prompt)
+    function_doc = retrieve_function_doc(prompt)
 
     semantic_doc = semantic_search(prompt)
 
-    if func_doc:
+    if function_doc:
 
         return f"""
 FUNCTION DOCUMENTATION
 ----------------------
-{func_doc}
+{function_doc}
 
 RELATED DOCUMENTATION
 ----------------------
@@ -228,10 +235,10 @@ RELATED DOCUMENTATION
     return semantic_doc
 
 # =====================================================
-# NATURAL LANGUAGE → PQL ENGINE
+# PQL TEMPLATE ENGINE
 # =====================================================
 
-def detect_problem_type(prompt):
+def detect_problem(prompt):
 
     p = prompt.lower()
 
@@ -243,19 +250,11 @@ def detect_problem_type(prompt):
 
         return "rework"
 
-    if "bottleneck" in p:
-
-        return "bottleneck"
-
     if "variant" in p:
 
         return "variant"
 
     return None
-
-# =====================================================
-# ACTIVITY EXTRACTION
-# =====================================================
 
 def extract_activities(prompt):
 
@@ -273,13 +272,9 @@ def extract_activities(prompt):
 
     return None,None
 
-# =====================================================
-# PQL TEMPLATE ENGINE
-# =====================================================
-
 def generate_template(prompt):
 
-    problem = detect_problem_type(prompt)
+    problem = detect_problem(prompt)
 
     if problem == "throughput":
 
@@ -309,19 +304,6 @@ DATEDIFF(
 ACTIVATION_COUNT(
  "ACTIVITY_TABLE"."ACTIVITY"
 ) > 1
-"""
-
-    if problem == "bottleneck":
-
-        return """
-PU_MAX(
- "CASE_TABLE",
- DATEDIFF(
-  'day',
-  "ACTIVITY_TABLE"."START_TIME",
-  "ACTIVITY_TABLE"."END_TIME"
- )
-)
 """
 
     if problem == "variant":
@@ -377,11 +359,11 @@ if prompt := st.chat_input("Ask your Celonis question..."):
 
 📖 Explanation
 
-This query was generated using the Copilot PQL template engine.
+This query was automatically generated by the Copilot PQL template engine.
 
-💡 Note
+💡 Example
 
-Replace table and column names with your actual Celonis data model.
+Replace CASE_TABLE and ACTIVITY_TABLE with your actual tables.
 """
 
     else:
@@ -390,11 +372,11 @@ Replace table and column names with your actual Celonis data model.
 
         final_prompt = f"""
 
-Use the documentation below.
+Use the documentation below to answer.
 
----------------------
+-----------------------
 {context}
----------------------
+-----------------------
 
 User question:
 
