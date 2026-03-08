@@ -39,7 +39,7 @@ def set_background(image_file):
     }}
 
     .stChatMessage {{
-        background-color: rgba(20,20,30,0.85);
+        background-color: rgba(20,20,30,0.9);
         border-radius:12px;
         padding:12px;
     }}
@@ -76,26 +76,40 @@ EMBED_MODEL = SentenceTransformer("all-MiniLM-L6-v2")
 # =====================================================
 
 SYSTEM_PROMPT = """
-You are a Senior Celonis Process Mining Consultant.
+You are a Senior Celonis Process Mining Consultant AI.
 
-Important Rules:
+Rules:
 
-1. Use ONLY the Celonis documentation provided in the context.
-2. Preserve Celonis PQL syntax exactly.
-3. Never convert PQL to SQL.
-4. Never invent functions.
-5. Celonis relationships are defined in the data model.
-6. Do NOT write SQL join conditions like:
-   Orders.CustomerID = Customers.CustomerID
-7. Avoid SQL concepts like JOIN, WHERE, GROUP BY.
+1. Only generate Celonis PQL.
+2. Never generate SQL.
+3. Celonis joins are defined in the data model.
+4. Do NOT write SQL joins.
+5. Use correct column syntax:
 
-If information is not found in documentation respond:
+"TABLE"."COLUMN"
+
+6. Use only official Celonis PQL functions.
+7. If information not found in documentation say:
 
 "Not found in official Celonis documentation."
+
+Return answers structured like:
+
+📌 PQL Query
+
+<query>
+
+📖 Explanation
+
+<explanation>
+
+💡 Note
+
+<notes>
 """
 
 # =====================================================
-# LOAD VECTOR DATABASE
+# LOAD VECTOR STORE
 # =====================================================
 
 @st.cache_resource
@@ -113,8 +127,6 @@ def load_vector_store():
 
     except:
 
-        st.warning("Vector store could not be loaded")
-
         return None,[]
 
 index,metadata = load_vector_store()
@@ -128,21 +140,7 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 
 # =====================================================
-# DETECT CELOINIS QUERY
-# =====================================================
-
-def is_celonis_query(prompt):
-
-    keywords = [
-        "celonis","pql","pu_",
-        "datediff","pull-up",
-        "throughput","event log"
-    ]
-
-    return any(k in prompt.lower() for k in keywords)
-
-# =====================================================
-# DETECT PQL FUNCTION
+# FUNCTION DETECTION
 # =====================================================
 
 def detect_pql_function(query):
@@ -152,12 +150,13 @@ def detect_pql_function(query):
     match = re.search(pattern,query.upper())
 
     if match:
+
         return match.group(1)
 
     return None
 
 # =====================================================
-# FUNCTION FIRST RETRIEVAL
+# EXACT FUNCTION RETRIEVAL
 # =====================================================
 
 def retrieve_function_doc(query):
@@ -165,13 +164,12 @@ def retrieve_function_doc(query):
     function = detect_pql_function(query)
 
     if not function:
+
         return None
 
     for item in metadata:
 
-        text = item.get("text","").upper()
-
-        if function in text:
+        if function in item["text"].upper():
 
             return item["text"]
 
@@ -211,16 +209,16 @@ def semantic_search(query,top_k=5):
 
 def retrieve_context(prompt):
 
-    function_doc = retrieve_function_doc(prompt)
+    func_doc = retrieve_function_doc(prompt)
 
     semantic_doc = semantic_search(prompt)
 
-    if function_doc:
+    if func_doc:
 
         return f"""
 FUNCTION DOCUMENTATION
 ----------------------
-{function_doc}
+{func_doc}
 
 RELATED DOCUMENTATION
 ----------------------
@@ -230,6 +228,113 @@ RELATED DOCUMENTATION
     return semantic_doc
 
 # =====================================================
+# NATURAL LANGUAGE → PQL ENGINE
+# =====================================================
+
+def detect_problem_type(prompt):
+
+    p = prompt.lower()
+
+    if "throughput" in p or "cycle time" in p:
+
+        return "throughput"
+
+    if "rework" in p:
+
+        return "rework"
+
+    if "bottleneck" in p:
+
+        return "bottleneck"
+
+    if "variant" in p:
+
+        return "variant"
+
+    return None
+
+# =====================================================
+# ACTIVITY EXTRACTION
+# =====================================================
+
+def extract_activities(prompt):
+
+    pattern = r"between (.+?) and (.+)"
+
+    match = re.search(pattern,prompt.lower())
+
+    if match:
+
+        start = match.group(1).strip()
+
+        end = match.group(2).strip()
+
+        return start,end
+
+    return None,None
+
+# =====================================================
+# PQL TEMPLATE ENGINE
+# =====================================================
+
+def generate_template(prompt):
+
+    problem = detect_problem_type(prompt)
+
+    if problem == "throughput":
+
+        start,end = extract_activities(prompt)
+
+        if start and end:
+
+            return f"""
+DATEDIFF(
+ 'day',
+ PU_FIRST(
+  "CASE_TABLE",
+  "ACTIVITY_TABLE"."TIMESTAMP",
+  FILTER "ACTIVITY_TABLE"."ACTIVITY" = '{start}'
+ ),
+ PU_FIRST(
+  "CASE_TABLE",
+  "ACTIVITY_TABLE"."TIMESTAMP",
+  FILTER "ACTIVITY_TABLE"."ACTIVITY" = '{end}'
+ )
+)
+"""
+
+    if problem == "rework":
+
+        return """
+ACTIVATION_COUNT(
+ "ACTIVITY_TABLE"."ACTIVITY"
+) > 1
+"""
+
+    if problem == "bottleneck":
+
+        return """
+PU_MAX(
+ "CASE_TABLE",
+ DATEDIFF(
+  'day',
+  "ACTIVITY_TABLE"."START_TIME",
+  "ACTIVITY_TABLE"."END_TIME"
+ )
+)
+"""
+
+    if problem == "variant":
+
+        return """
+VARIANT(
+ "ACTIVITY_TABLE"."ACTIVITY"
+)
+"""
+
+    return None
+
+# =====================================================
 # HEADER
 # =====================================================
 
@@ -237,7 +342,7 @@ st.title("🧠 Process Mining Copilot (Celonis)")
 st.markdown("Powered by Divyansh")
 
 # =====================================================
-# CHAT HISTORY
+# DISPLAY CHAT HISTORY
 # =====================================================
 
 for msg in st.session_state.messages:
@@ -250,7 +355,7 @@ for msg in st.session_state.messages:
 # CHAT INPUT
 # =====================================================
 
-if prompt := st.chat_input("Ask your question..."):
+if prompt := st.chat_input("Ask your Celonis question..."):
 
     st.session_state.messages.append({
         "role":"user",
@@ -261,84 +366,59 @@ if prompt := st.chat_input("Ask your question..."):
 
         st.markdown(prompt)
 
-    if is_celonis_query(prompt):
+    template = generate_template(prompt)
 
-        context = retrieve_context(prompt)
+    if template:
 
-        final_prompt = f"""
-You MUST answer using ONLY the documentation below.
+        reply = f"""
+📌 PQL Query
 
-=============================
-OFFICIAL CELOINIS DOCUMENTATION
-=============================
-{context}
+{template}
 
-=============================
-USER QUESTION
-=============================
-{prompt}
+📖 Explanation
 
-Rules:
+This query was generated using the Copilot PQL template engine.
 
-• Preserve Celonis syntax exactly
-• Never use SQL
-• Never write join conditions
-• Only use documented PQL functions
+💡 Note
 
-If documentation does not contain the answer respond exactly with:
-
-Not found in official Celonis documentation.
+Replace table and column names with your actual Celonis data model.
 """
 
     else:
 
-        final_prompt = prompt
+        context = retrieve_context(prompt)
+
+        final_prompt = f"""
+
+Use the documentation below.
+
+---------------------
+{context}
+---------------------
+
+User question:
+
+{prompt}
+"""
+
+        response = client.chat.completions.create(
+
+            model=MODEL_NAME,
+
+            messages=[
+                {"role":"system","content":SYSTEM_PROMPT},
+                {"role":"user","content":final_prompt}
+            ],
+
+            temperature=0.1,
+            max_tokens=1500
+        )
+
+        reply = response.choices[0].message.content
 
     with st.chat_message("assistant"):
 
-        with st.spinner("Analyzing documentation..."):
-
-            response = client.chat.completions.create(
-                model=MODEL_NAME,
-                messages=[
-                    {"role":"system","content":SYSTEM_PROMPT},
-                    *st.session_state.messages[:-1],
-                    {"role":"user","content":final_prompt}
-                ],
-                temperature=0.1,
-                max_tokens=1500
-            )
-
-            reply = response.choices[0].message.content
-
-            # =====================================
-            # GUARDRAIL AGAINST FAKE FUNCTIONS
-            # =====================================
-
-            valid_functions = [
-                "PU_SUM","PU_AVG","PU_MIN","PU_MAX",
-                "PU_FIRST","PU_LAST","PU_COUNT",
-                "PU_COUNT_DISTINCT","PU_MEDIAN",
-                "PU_STDEV"
-            ]
-
-            found = re.findall(r'PU_[A-Z_]+',reply)
-
-            for f in found:
-
-                if f not in valid_functions:
-
-                    reply += "\n\n⚠️ Warning: Possible non-standard PQL function detected."
-
-            # =====================================
-            # REMOVE SQL JOIN STYLE
-            # =====================================
-
-            if "=" in reply and "CUSTOMER" in reply.upper():
-
-                reply += "\n\n⚠️ Celonis relationships are defined in the data model. SQL-style joins are not required."
-
-            st.markdown(reply)
+        st.markdown(reply)
 
     st.session_state.messages.append({
         "role":"assistant",
