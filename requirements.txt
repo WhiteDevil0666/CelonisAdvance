@@ -11,3 +11,4 @@ openpyxl
 scikit-learn
 torch
 PyPDF2 
+rank-bm25
