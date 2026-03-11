@@ -7,9 +7,9 @@ import pickle
 import re
 import base64
 
-# =====================================================
+# =====================================
 # PAGE CONFIG
-# =====================================================
+# =====================================
 
 st.set_page_config(
     page_title="Celonis Copilot",
@@ -17,392 +17,303 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# =====================================================
-# BACKGROUND
-# =====================================================
+# =====================================
+# BACKGROUND SETUP
+# =====================================
 
 def set_background(image_file):
+    try:
+        with open(image_file, "rb") as f:
+            encoded = base64.b64encode(f.read()).decode()
 
-    with open(image_file,"rb") as f:
-        encoded = base64.b64encode(f.read()).decode()
+        page_bg = f"""
+        <style>
 
-    css = f"""
-    <style>
+        /* Full App Background */
+        .stApp {{
+            background:
+                linear-gradient(rgba(0,0,0,0.85), rgba(0,0,0,0.85)),
+                url("data:image/png;base64,{encoded}");
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+        }}
 
-    .stApp {{
-        background:
-        linear-gradient(rgba(0,0,0,0.85),rgba(0,0,0,0.85)),
-        url("data:image/png;base64,{encoded}");
-        background-size:cover;
-        background-position:center;
-        background-attachment:fixed;
-    }}
+        /* Remove white container */
+        .main {{
+            background-color: transparent !important;
+        }}
 
-    .stChatMessage {{
-        background-color: rgba(20,20,30,0.9);
-        border-radius:12px;
-        padding:12px;
-    }}
+        section.main > div {{
+            background-color: transparent !important;
+        }}
 
-    div[data-testid="stChatInput"] {{
-        background-color: rgba(20,20,30,0.95);
-        border-radius:12px;
-        padding:8px;
-    }}
+        /* Remove bottom white space */
+        .block-container {{
+            padding-top: 2rem;
+            padding-bottom: 0rem;
+        }}
 
-    h1,h2,h3,p,div,span {{
-        color:white !important;
-    }}
+        /* Chat bubbles */
+        .stChatMessage {{
+            background-color: rgba(20, 20, 30, 0.85);
+            border-radius: 12px;
+            padding: 12px;
+        }}
 
-    </style>
-    """
+        /* Chat input */
+        div[data-testid="stChatInput"] {{
+            background-color: rgba(20, 20, 30, 0.95);
+            border-radius: 12px;
+            padding: 8px;
+        }}
 
-    st.markdown(css,unsafe_allow_html=True)
+        /* Sidebar */
+        section[data-testid="stSidebar"] {{
+            background-color: rgba(15, 15, 25, 0.95);
+        }}
 
+        /* Text color */
+        h1, h2, h3, p, div, span {{
+            color: white !important;
+        }}
+
+        </style>
+        """
+        st.markdown(page_bg, unsafe_allow_html=True)
+    except FileNotFoundError:
+        pass  # Background image not found, skip gracefully
+
+# Call background
 set_background("background.png")
 
-# =====================================================
-# CONFIG
-# =====================================================
+# =====================================
+# CONFIGURATION
+# =====================================
 
-MODEL_NAME = "llama-3.3-70b-versatile"
-
+MODEL_NAME = "llama-3.1-8b-instant"
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
-
 EMBED_MODEL = SentenceTransformer("all-MiniLM-L6-v2")
 
-# =====================================================
+# =====================================
 # SYSTEM PROMPT
-# =====================================================
+# =====================================
 
 SYSTEM_PROMPT = """
 You are a Senior Celonis Process Mining Consultant AI.
 
-Rules:
+STRICT RULES:
 
-1. Use ONLY Celonis PQL.
-2. Never generate SQL.
-3. Celonis relationships exist in the data model.
-4. Never write SQL joins.
-5. Column syntax must be:
+1. For general Process Mining questions:
+   - Provide structured explanation.
+   - Use simple real-world examples.
 
-"TABLE"."COLUMN"
+2. For Celonis / PQL questions:
+   - STRICTLY use provided documentation context AND example queries.
+   - Preserve official syntax EXACTLY.
+   - Do NOT convert PQL into SQL.
+   - Do NOT simplify syntax.
+   - Do NOT invent examples outside of provided context.
+   - If not found in documentation, say:
+     "Not found in official Celonis documentation."
 
-6. Always show correct PQL syntax when explaining functions.
-7. If the user asks about a function:
-   - Explain it clearly
-   - Show correct syntax
-   - Provide a real example query.
-
-If information is not found in documentation say:
-
-"Not found in official Celonis documentation."
-
-Always structure answers as:
-
-📌 PQL Query
-
-<query>
-
-📖 Explanation
-
-<explanation>
-
-💡 Example
-
-<example query>
+3. Only generate new PQL queries if explicitly requested.
+4. Never use SQL keywords like SELECT, FROM, WHERE, JOIN.
+5. When example PQL queries are provided in context, reference them to guide your answer.
+6. Priority: Technical Accuracy > Simplicity.
 """
 
-# =====================================================
-# LOAD VECTOR DATABASE
-# =====================================================
+# =====================================
+# LOAD BOTH VECTOR STORES
+# =====================================
 
 @st.cache_resource
-def load_vector_store():
+def load_vector_stores():
+    # --- Primary: Official Celonis Docs ---
+    docs_index = faiss.read_index("pql_faiss.index")
+    with open("pql_metadata.pkl", "rb") as f:
+        docs_metadata = pickle.load(f)  # list of dicts: {url, title, text}
 
-    try:
+    # --- Secondary: PQL Q&A Examples ---
+    qa_index = faiss.read_index("pql_knowledge.index")
+    with open("pql_knowledge.pkl", "rb") as f:
+        qa_metadata = pickle.load(f)  # list of strings: Question + PQL + Explanation
 
-        index = faiss.read_index("pql_faiss.index")
+    return docs_index, docs_metadata, qa_index, qa_metadata
 
-        with open("pql_metadata.pkl","rb") as f:
+docs_index, docs_metadata, qa_index, qa_metadata = load_vector_stores()
 
-            metadata = pickle.load(f)
-
-        return index,metadata
-
-    except:
-
-        st.warning("Vector database not found")
-
-        return None,[]
-
-index,metadata = load_vector_store()
-
-# =====================================================
+# =====================================
 # SESSION MEMORY
-# =====================================================
+# =====================================
 
 if "messages" not in st.session_state:
-
     st.session_state.messages = []
 
-# =====================================================
-# FUNCTION DETECTION
-# =====================================================
+# =====================================
+# QUERY DETECTION
+# =====================================
 
-def detect_pql_function(prompt):
+def is_celonis_query(prompt):
+    keywords = [
+        "celonis", "pql", "pu_", "datediff", "remap",
+        "process query language", "pull-up", "running_sum",
+        "throughput", "event log", "case table", "activity table",
+        "conformance", "variant", "filter", "process mining",
+        "count_table", "avg", "median", "moving_avg", "process",
+        "avg_process", "source", "target", "rework", "loop"
+    ]
+    return any(word in prompt.lower() for word in keywords)
 
-    pattern = r"\b(PU_[A-Z_]+|DATEDIFF|RUNNING_SUM|ACTIVATION_COUNT|DOMAIN_TABLE|BIND)\b"
+# =====================================
+# EXACT FUNCTION ROUTING
+# =====================================
 
-    match = re.search(pattern,prompt.upper())
+def exact_function_match(query):
+    query_upper = query.upper()
 
-    if match:
+    # Match any ALL_CAPS_WITH_UNDERSCORES token (PQL function pattern)
+    tokens = re.findall(r'\b[A-Z][A-Z0-9_]{2,}\b', query_upper)
 
-        return match.group(1)
-
-    return None
-
-# =====================================================
-# FUNCTION DOCUMENTATION RETRIEVAL
-# =====================================================
-
-def retrieve_function_doc(prompt):
-
-    function = detect_pql_function(prompt)
-
-    if not function:
-
-        return None
-
-    for item in metadata:
-
-        if function in item["text"].upper():
-
-            return item["text"]
+    for token in tokens:
+        for item in docs_metadata:
+            url = item.get("url", "").lower()
+            if token.lower().replace("_", "-") in url or token.lower() in url:
+                return item["text"]
 
     return None
 
-# =====================================================
-# SEMANTIC SEARCH
-# =====================================================
+# =====================================
+# SEMANTIC SEARCH — BOTH STORES
+# =====================================
 
-def semantic_search(prompt,top_k=5):
+def semantic_search(query, top_k=3):
+    query_embedding = EMBED_MODEL.encode([query])
+    query_np = np.array(query_embedding)
 
-    if index is None:
+    # Search official docs
+    _, I_docs = docs_index.search(query_np, top_k)
+    doc_results = "\n\n".join(
+        docs_metadata[i]["text"] for i in I_docs[0] if i < len(docs_metadata)
+    )
 
-        return ""
+    # Search PQL Q&A examples
+    _, I_qa = qa_index.search(query_np, top_k)
+    qa_results = "\n\n".join(
+        qa_metadata[i] for i in I_qa[0] if i < len(qa_metadata)
+    )
 
-    embedding = EMBED_MODEL.encode([prompt])
+    return doc_results, qa_results
 
-    embedding = np.array(embedding).astype("float32")
-
-    faiss.normalize_L2(embedding)
-
-    D,I = index.search(embedding,top_k)
-
-    results = []
-
-    for idx in I[0]:
-
-        if idx < len(metadata):
-
-            results.append(metadata[idx]["text"])
-
-    return "\n\n".join(results)
-
-# =====================================================
+# =====================================
 # CONTEXT PIPELINE
-# =====================================================
+# =====================================
 
 def retrieve_context(prompt):
+    # 1. Try exact function match from docs first
+    exact_match = exact_function_match(prompt)
 
-    function_doc = retrieve_function_doc(prompt)
+    # 2. Always run semantic search on both stores
+    doc_context, qa_context = semantic_search(prompt, top_k=3)
 
-    semantic_doc = semantic_search(prompt)
+    # 3. Build final context block
+    sections = []
 
-    if function_doc:
+    if exact_match:
+        sections.append("### 📖 Official Documentation (Exact Match):\n" + exact_match)
+    elif doc_context:
+        sections.append("### 📖 Official Documentation:\n" + doc_context)
 
-        return f"""
-FUNCTION DOCUMENTATION
-----------------------
-{function_doc}
+    if qa_context:
+        sections.append("### 💡 Relevant PQL Query Examples:\n" + qa_context)
 
-RELATED DOCUMENTATION
-----------------------
-{semantic_doc}
-"""
+    return "\n\n".join(sections)
 
-    return semantic_doc
+# =====================================
+# SIDEBAR
+# =====================================
 
-# =====================================================
-# PQL TEMPLATE ENGINE
-# =====================================================
+with st.sidebar:
+    st.markdown("## 🧠 Celonis Copilot")
+    st.markdown("---")
+    st.markdown("**Model:** `llama-3.1-8b-instant`")
+    st.markdown("**Embed Model:** `all-MiniLM-L6-v2`")
+    st.markdown("---")
+    st.markdown("**Knowledge Base:**")
+    st.markdown(f"- 📚 Docs chunks: `{len(docs_metadata)}`")
+    st.markdown(f"- 💡 PQL examples: `{len(qa_metadata)}`")
+    st.markdown("---")
 
-def detect_problem(prompt):
+    if st.button("🗑️ Clear Chat History"):
+        st.session_state.messages = []
+        st.rerun()
 
-    p = prompt.lower()
+    st.markdown("---")
+    st.caption("Powered by Divyansh")
 
-    if "throughput" in p or "cycle time" in p:
-
-        return "throughput"
-
-    if "rework" in p:
-
-        return "rework"
-
-    if "variant" in p:
-
-        return "variant"
-
-    return None
-
-def extract_activities(prompt):
-
-    pattern = r"between (.+?) and (.+)"
-
-    match = re.search(pattern,prompt.lower())
-
-    if match:
-
-        start = match.group(1).strip()
-
-        end = match.group(2).strip()
-
-        return start,end
-
-    return None,None
-
-def generate_template(prompt):
-
-    problem = detect_problem(prompt)
-
-    if problem == "throughput":
-
-        start,end = extract_activities(prompt)
-
-        if start and end:
-
-            return f"""
-DATEDIFF(
- 'day',
- PU_FIRST(
-  "CASE_TABLE",
-  "ACTIVITY_TABLE"."TIMESTAMP",
-  FILTER "ACTIVITY_TABLE"."ACTIVITY" = '{start}'
- ),
- PU_FIRST(
-  "CASE_TABLE",
-  "ACTIVITY_TABLE"."TIMESTAMP",
-  FILTER "ACTIVITY_TABLE"."ACTIVITY" = '{end}'
- )
-)
-"""
-
-    if problem == "rework":
-
-        return """
-ACTIVATION_COUNT(
- "ACTIVITY_TABLE"."ACTIVITY"
-) > 1
-"""
-
-    if problem == "variant":
-
-        return """
-VARIANT(
- "ACTIVITY_TABLE"."ACTIVITY"
-)
-"""
-
-    return None
-
-# =====================================================
-# HEADER
-# =====================================================
+# =====================================
+# UI HEADER
+# =====================================
 
 st.title("🧠 Process Mining Copilot (Celonis)")
-st.markdown("Powered by Divyansh")
+st.markdown("Ask anything about **PQL**, **Process Mining**, or **Celonis** platform.")
 
-# =====================================================
+# =====================================
 # DISPLAY CHAT HISTORY
-# =====================================================
+# =====================================
 
-for msg in st.session_state.messages:
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
 
-    with st.chat_message(msg["role"]):
-
-        st.markdown(msg["content"])
-
-# =====================================================
+# =====================================
 # CHAT INPUT
-# =====================================================
+# =====================================
 
-if prompt := st.chat_input("Ask your Celonis question..."):
+if prompt := st.chat_input("Ask your question..."):
 
-    st.session_state.messages.append({
-        "role":"user",
-        "content":prompt
-    })
+    st.session_state.messages.append({"role": "user", "content": prompt})
 
     with st.chat_message("user"):
-
         st.markdown(prompt)
 
-    template = generate_template(prompt)
-
-    if template:
-
-        reply = f"""
-📌 PQL Query
-
-{template}
-
-📖 Explanation
-
-This query was automatically generated by the Copilot PQL template engine.
-
-💡 Example
-
-Replace CASE_TABLE and ACTIVITY_TABLE with your actual tables.
-"""
-
-    else:
-
+    # Build final prompt
+    if is_celonis_query(prompt):
         context = retrieve_context(prompt)
+        final_prompt = f"""STRICT MODE ENABLED.
 
-        final_prompt = f"""
-
-Use the documentation below to answer.
-
------------------------
+Documentation & Example Context:
+---------------------------------
 {context}
------------------------
+---------------------------------
 
-User question:
-
+User Question:
 {prompt}
 """
+    else:
+        final_prompt = prompt
 
-        response = client.chat.completions.create(
+    # Build API message history (use original messages for history, injected prompt for current)
+    api_messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    for msg in st.session_state.messages[:-1]:
+        api_messages.append({"role": msg["role"], "content": msg["content"]})
+    api_messages.append({"role": "user", "content": final_prompt})
 
-            model=MODEL_NAME,
-
-            messages=[
-                {"role":"system","content":SYSTEM_PROMPT},
-                {"role":"user","content":final_prompt}
-            ],
-
-            temperature=0.1,
-            max_tokens=1500
-        )
-
-        reply = response.choices[0].message.content
-
+    # Generate response
+    reply = ""
     with st.chat_message("assistant"):
+        with st.spinner("Analyzing..."):
+            try:
+                response = client.chat.completions.create(
+                    model=MODEL_NAME,
+                    messages=api_messages,
+                    temperature=0.1,
+                    max_tokens=1500
+                )
+                reply = response.choices[0].message.content
+                st.markdown(reply)
+            except Exception as e:
+                reply = f"⚠️ Error contacting Groq API: {str(e)}"
+                st.error(reply)
 
-        st.markdown(reply)
-
-    st.session_state.messages.append({
-        "role":"assistant",
-        "content":reply
-    })
+    st.session_state.messages.append({"role": "assistant", "content": reply})
