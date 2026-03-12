@@ -789,17 +789,21 @@ def validate_pql(answer):
 
     import re
 
+    # find code blocks
     code_blocks = re.findall(r"```(.*?)```", answer, re.DOTALL)
 
+    # if there are no code blocks we assume explanation only
     if not code_blocks:
         return True
 
     sql_keywords = ["SELECT", "FROM", "WHERE", "JOIN", "GROUP BY"]
 
     for block in code_blocks:
+
         upper = block.upper()
 
         for kw in sql_keywords:
+
             if kw in upper:
                 return False
 
@@ -958,6 +962,7 @@ if prompt:
     })
 
     store_learning(prompt, answer)
+
 
 
 
