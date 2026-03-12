@@ -37,7 +37,7 @@ MODEL_FAST = "llama-3.1-8b-instant"
 MODEL_REASON = "mixtral-8x7b-32768"
 
 TOP_K_RETRIEVAL = 5
-MAX_CONTEXT_CHARS = 6000
+MAX_CONTEXT_CHARS = 4000
 
 DATA_DIR = "./"
 
@@ -473,18 +473,19 @@ def hybrid_retrieve(query):
 
     # fallback to web scraping
     if not docs:
-
+    
         scraped = scrape_celonis_docs(query)
-
+    
         if scraped:
-
+    
             add_dynamic_docs(scraped)
-
+    
             docs = [scraped]
-
+    
     context = "\n\n".join(docs)
-
+    
     return context[:MAX_CONTEXT_CHARS]
+
 
 
 # ==========================================================
@@ -555,6 +556,40 @@ def retrieve_context(query):
 # ==========================================================
 # PART 3 — AGENT SYSTEM
 # ==========================================================
+
+
+
+# ==========================================================
+# CONTEXT COMPRESSION
+# ==========================================================
+
+def compress_context(context):
+
+    if len(context) < 3000:
+        return context
+
+    try:
+
+        r = client.chat.completions.create(
+            model = MODEL_FAST,
+            messages=[{
+                "role":"user",
+                "content":f"""
+Summarize the following Celonis documentation while preserving
+important PQL syntax, functions, and explanations.
+
+{context}
+"""
+            }],
+            max_tokens=400,
+            temperature=0
+        )
+
+        return r.choices[0].message.content
+
+    except:
+
+        return context[:3000]
 
 # ==========================================================
 # INTENT AGENT
@@ -691,8 +726,8 @@ Rules:
 User question:
 {prompt}
 
-Reference context:
-{context}
+Reference context (Celonis docs):
+{context[:3000]}
 
 Write the PQL query and explain it.
 """
@@ -725,9 +760,10 @@ def explain_concept(prompt, context):
 
         messages=[
             {"role":"system","content":
-             "Explain Celonis concepts clearly."},
+            "You are a Celonis Process Mining expert. Explain concepts clearly using correct Celonis terminology and provide examples when useful."},
+
             {"role":"user","content":
-             prompt + "\n\n" + context}
+            prompt + "\n\n" + context}
         ],
 
         temperature=0.2
@@ -808,7 +844,8 @@ def run_agent(prompt):
 
     rewritten = rewrite_query(prompt)
 
-    queries = [rewritten] + generate_multi_queries(rewritten)
+    queries = [rewritten]
+    queries += generate_multi_queries(rewritten)[:2]
 
     context = ""
 
@@ -818,17 +855,21 @@ def run_agent(prompt):
 
         for q in queries:
 
-            all_context.append(
-                retrieve_context(q)
-            )
+            all_context.append(retrieve_context(q))
 
         context = "\n\n".join(all_context)
 
+        context = context[:MAX_CONTEXT_CHARS]
+
     if "generate_pql" in tools:
+
+        context = compress_context(context)
 
         answer = generate_pql(prompt, context)
 
     else:
+
+        context = compress_context(context)
 
         answer = explain_concept(prompt, context)
 
@@ -908,4 +949,5 @@ if prompt:
     })
 
     store_learning(prompt, answer)
+
 
