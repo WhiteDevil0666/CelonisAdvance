@@ -1,236 +1,649 @@
+# ==========================================================
+# CELO NIS AI AGENT (PRODUCTION VERSION)
+# PART 1 — CORE INFRASTRUCTURE
+# ==========================================================
+
 import streamlit as st
-from groq import Groq
-from sentence_transformers import SentenceTransformer, CrossEncoder
+import os
+import re
+import json
+import pickle
+import logging
+import time
+import requests
 import numpy as np
 import faiss
-import pickle
-import re
-import os
-import requests
+
 from bs4 import BeautifulSoup
+from groq import Groq
+from sentence_transformers import SentenceTransformer, CrossEncoder
 from rank_bm25 import BM25Okapi
 
 # ==========================================================
-# CONFIG
+# STREAMLIT CONFIG
 # ==========================================================
 
-st.set_page_config(page_title="Celonis AI Agent", layout="wide")
+st.set_page_config(
+    page_title="Celonis AI Copilot",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# ==========================================================
+# GLOBAL CONFIG
+# ==========================================================
 
 MODEL_FAST = "llama-3.1-8b-instant"
-MODEL_REASON = "llama-3.1-70b-versatile"
+MODEL_REASON = "mixtral-8x7b-32768"
+
+TOP_K_RETRIEVAL = 5
+MAX_CONTEXT_CHARS = 6000
+
+DATA_DIR = "./"
+
+DOC_INDEX_FILE = "pql_faiss.index"
+DOC_META_FILE = "pql_metadata.pkl"
+
+QA_INDEX_FILE = "pql_knowledge.index"
+QA_META_FILE = "pql_knowledge.pkl"
+
+DYNAMIC_INDEX_FILE = "dynamic_docs.index"
+DYNAMIC_META_FILE = "dynamic_docs.pkl"
+
+LEARN_FILE = "learned_examples.pkl"
+
+LOG_FILE = "agent.log"
+
+# ==========================================================
+# LOGGING
+# ==========================================================
+
+logging.basicConfig(
+    filename=LOG_FILE,
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s"
+)
+
+def log_event(msg):
+    logging.info(msg)
+
+# ==========================================================
+# GROQ CLIENT
+# ==========================================================
+
+if "GROQ_API_KEY" not in st.secrets:
+    st.error("Missing GROQ_API_KEY in Streamlit secrets.")
+    st.stop()
 
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
 # ==========================================================
-# LOAD MODELS
+# MODEL LOADING
 # ==========================================================
 
 @st.cache_resource
 def load_models():
-    embed = SentenceTransformer("all-MiniLM-L6-v2")
-    rerank = CrossEncoder("BAAI/bge-reranker-base")
-    return embed, rerank
+
+    embed_model = SentenceTransformer("all-MiniLM-L6-v2")
+
+    rerank_model = CrossEncoder("BAAI/bge-reranker-base")
+
+    return embed_model, rerank_model
 
 EMBED_MODEL, RERANK_MODEL = load_models()
 
 # ==========================================================
-# LOAD KNOWLEDGE BASE
+# CACHE SYSTEM
 # ==========================================================
 
-def load_index(index_file, meta_file):
+@st.cache_data(ttl=3600)
+def cached_embed(text):
 
-    if os.path.exists(index_file):
+    emb = EMBED_MODEL.encode([text])
 
-        index = faiss.read_index(index_file)
+    return np.array(emb).astype("float32")
 
-        with open(meta_file, "rb") as f:
-            meta = pickle.load(f)
+# ==========================================================
+# FILE UTILITIES
+# ==========================================================
+
+def safe_pickle_load(path):
+
+    if not os.path.exists(path):
+        return None
+
+    with open(path,"rb") as f:
+        return pickle.load(f)
+
+def safe_pickle_save(path,obj):
+
+    with open(path,"wb") as f:
+        pickle.dump(obj,f)
+
+# ==========================================================
+# VECTOR STORE LOADING
+# ==========================================================
+
+def load_vector_store(index_path,meta_path):
+
+    if os.path.exists(index_path):
+
+        index = faiss.read_index(index_path)
+
+        meta = safe_pickle_load(meta_path)
+
+        if meta is None:
+            meta = []
 
     else:
 
         index = faiss.IndexFlatL2(384)
         meta = []
 
-    return index, meta
-
-docs_index, docs_meta = load_index("pql_faiss.index","pql_metadata.pkl")
-qa_index, qa_meta = load_index("pql_knowledge.index","pql_knowledge.pkl")
-
-dynamic_index, dynamic_meta = load_index("dynamic_docs.index","dynamic_docs.pkl")
+    return index,meta
 
 # ==========================================================
-# BM25
+# LOAD STATIC KNOWLEDGE
 # ==========================================================
 
-docs_tokens = [re.findall(r"\w+", i["text"].lower()) for i in docs_meta] if docs_meta else []
-docs_bm25 = BM25Okapi(docs_tokens) if docs_tokens else None
+docs_index, docs_meta = load_vector_store(
+    DOC_INDEX_FILE,
+    DOC_META_FILE
+)
+
+qa_index, qa_meta = load_vector_store(
+    QA_INDEX_FILE,
+    QA_META_FILE
+)
+
+# ==========================================================
+# LOAD DYNAMIC KNOWLEDGE
+# ==========================================================
+
+dynamic_index, dynamic_meta = load_vector_store(
+    DYNAMIC_INDEX_FILE,
+    DYNAMIC_META_FILE
+)
+
+# ==========================================================
+# BM25 INDEX
+# ==========================================================
+
+if docs_meta:
+
+    docs_tokens = [
+        re.findall(r"\w+", item["text"].lower())
+        for item in docs_meta
+    ]
+
+    docs_bm25 = BM25Okapi(docs_tokens)
+
+else:
+
+    docs_bm25 = None
 
 # ==========================================================
 # SELF LEARNING MEMORY
 # ==========================================================
 
-LEARN_FILE = "learned_examples.pkl"
-
 if os.path.exists(LEARN_FILE):
 
-    with open(LEARN_FILE,"rb") as f:
-        learned = pickle.load(f)
+    learned_examples = safe_pickle_load(LEARN_FILE)
 
 else:
 
-    learned = []
+    learned_examples = []
 
-def store_learning(q,a):
+def store_learning(question,answer):
 
-    if len(a) < 200:
+    if len(answer) < 200:
         return
 
-    learned.append({"q":q,"a":a})
+    learned_examples.append({
+        "q":question,
+        "a":answer
+    })
 
-    with open(LEARN_FILE,"wb") as f:
-        pickle.dump(learned,f)
+    safe_pickle_save(LEARN_FILE,learned_examples)
 
 # ==========================================================
-# DOC SCRAPER
+# UTILITY FUNCTIONS
 # ==========================================================
 
-def scrape_celonis(query):
+def normalize_text(t):
 
-    try:
+    return re.sub(r"\s+"," ",t).strip()
 
-        search_url=f"https://docs.celonis.com/en/search.html?q={query}"
+def chunk_text(text,size=500):
 
-        r=requests.get(search_url,timeout=10)
+    chunks = []
 
-        soup=BeautifulSoup(r.text,"html.parser")
+    for i in range(0,len(text),size):
 
-        links=[]
+        chunks.append(text[i:i+size])
 
-        for a in soup.find_all("a",href=True):
+    return chunks
 
-            if "/en/" in a["href"] and ".html" in a["href"]:
 
-                links.append("https://docs.celonis.com"+a["href"])
-
-        if not links:
-            return None
-
-        page=requests.get(links[0],timeout=10)
-
-        ps=BeautifulSoup(page.text,"html.parser").find_all("p")
-
-        text="\n".join(p.get_text() for p in ps)
-
-        return text[:6000]
-
-    except:
-
-        return None
+# ==========================================================
+# PART 2 — KNOWLEDGE RETRIEVAL ENGINE
+# ==========================================================
 
 # ==========================================================
 # VECTOR SEARCH
 # ==========================================================
 
-def vector_search(query, index, meta, top_k=4):
+def vector_search(query, index, metadata, top_k=TOP_K_RETRIEVAL):
 
-    if len(meta)==0:
+    if len(metadata) == 0:
         return []
 
-    emb = EMBED_MODEL.encode([query])
-    emb = np.array(emb).astype("float32")
+    query_emb = cached_embed(query)
 
-    D,I = index.search(emb,top_k)
+    D, I = index.search(query_emb, top_k)
 
-    docs=[]
+    results = []
 
     for idx in I[0]:
 
-        if idx < len(meta):
+        if idx < len(metadata):
 
-            item=meta[idx]
+            item = metadata[idx]
 
-            if isinstance(item,dict):
-                docs.append(item["text"])
+            if isinstance(item, dict):
+                results.append(item.get("text",""))
             else:
-                docs.append(item)
+                results.append(item)
 
-    return docs
+    return results
+
 
 # ==========================================================
-# RERANK
+# BM25 SEARCH
 # ==========================================================
 
-def rerank(query, docs):
+def bm25_search(query, top_k=TOP_K_RETRIEVAL):
+
+    if docs_bm25 is None:
+        return []
+
+    tokens = re.findall(r"\w+", query.lower())
+
+    scores = docs_bm25.get_scores(tokens)
+
+    ranked = np.argsort(scores)[::-1][:top_k]
+
+    results = []
+
+    for i in ranked:
+
+        if scores[i] > 0:
+
+            results.append(docs_meta[i]["text"])
+
+    return results
+
+
+# ==========================================================
+# DEDUPLICATION
+# ==========================================================
+
+def deduplicate(docs):
+
+    seen = set()
+    unique = []
+
+    for d in docs:
+
+        key = d[:100]
+
+        if key not in seen:
+
+            seen.add(key)
+            unique.append(d)
+
+    return unique
+
+
+# ==========================================================
+# CROSS ENCODER RERANKING
+# ==========================================================
+
+def rerank_results(query, docs, top_k=4):
 
     if not docs:
         return []
 
-    pairs=[[query,d] for d in docs]
+    pairs = [[query, doc] for doc in docs]
 
-    scores=RERANK_MODEL.predict(pairs)
+    scores = RERANK_MODEL.predict(pairs)
 
-    ranked=[d for _,d in sorted(zip(scores,docs),reverse=True)]
+    ranked = [doc for _, doc in sorted(zip(scores, docs), reverse=True)]
 
-    return ranked[:4]
+    return ranked[:top_k]
+
 
 # ==========================================================
-# RETRIEVAL AGENT
+# LEARNED MEMORY SEARCH
 # ==========================================================
 
-def retrieve_docs(query):
+def search_learned_memory(query):
 
-    docs=[]
+    if not learned_examples:
+        return []
 
-    docs += vector_search(query,docs_index,docs_meta)
-    docs += vector_search(query,qa_index,qa_meta)
-    docs += vector_search(query,dynamic_index,dynamic_meta)
+    tokens = set(re.findall(r"\w+", query.lower()))
 
-    docs=list(dict.fromkeys(docs))
+    results = []
 
-    docs=rerank(query,docs)
+    for item in learned_examples:
 
+        q_tokens = set(re.findall(r"\w+", item["q"].lower()))
+
+        overlap = len(tokens & q_tokens)
+
+        if overlap > 2:
+
+            results.append(item["a"])
+
+    return results[:2]
+
+
+# ==========================================================
+# CELO NIS DOC SCRAPER
+# ==========================================================
+
+def scrape_celonis_docs(query):
+
+    try:
+
+        search_url = f"https://docs.celonis.com/en/search.html?q={query}"
+
+        r = requests.get(
+            search_url,
+            timeout=10,
+            headers={"User-Agent":"Mozilla/5.0"}
+        )
+
+        soup = BeautifulSoup(r.text, "html.parser")
+
+        links = []
+
+        for a in soup.find_all("a", href=True):
+
+            href = a["href"]
+
+            if "/en/" in href and ".html" in href:
+
+                links.append("https://docs.celonis.com" + href)
+
+        if not links:
+            return None
+
+        page = requests.get(links[0], timeout=10)
+
+        page_soup = BeautifulSoup(page.text, "html.parser")
+
+        paragraphs = page_soup.find_all("p")
+
+        text = "\n".join(p.get_text() for p in paragraphs)
+
+        return text[:5000]
+
+    except Exception as e:
+
+        log_event(f"Doc scrape failed: {e}")
+
+        return None
+
+
+# ==========================================================
+# ADD DYNAMIC DOCUMENTS
+# ==========================================================
+
+def add_dynamic_docs(text):
+
+    chunks = chunk_text(text)
+
+    embeddings = EMBED_MODEL.encode(chunks)
+
+    embeddings = np.array(embeddings).astype("float32")
+
+    dynamic_index.add(embeddings)
+
+    dynamic_meta.extend(chunks)
+
+    faiss.write_index(dynamic_index, DYNAMIC_INDEX_FILE)
+
+    safe_pickle_save(DYNAMIC_META_FILE, dynamic_meta)
+
+    log_event("Dynamic docs added to FAISS store")
+
+
+# ==========================================================
+# SEARCH DYNAMIC STORE
+# ==========================================================
+
+def search_dynamic_store(query):
+
+    if len(dynamic_meta) == 0:
+        return []
+
+    emb = cached_embed(query)
+
+    D, I = dynamic_index.search(emb, 3)
+
+    docs = []
+
+    for idx in I[0]:
+
+        if idx < len(dynamic_meta):
+
+            docs.append(dynamic_meta[idx])
+
+    return docs
+
+
+# ==========================================================
+# HYBRID RETRIEVAL PIPELINE
+# ==========================================================
+
+def hybrid_retrieve(query):
+
+    docs = []
+
+    # semantic search docs
+    docs += vector_search(query, docs_index, docs_meta)
+
+    # semantic search examples
+    docs += vector_search(query, qa_index, qa_meta)
+
+    # dynamic knowledge
+    docs += search_dynamic_store(query)
+
+    # keyword search
+    docs += bm25_search(query)
+
+    # learned memory
+    docs += search_learned_memory(query)
+
+    docs = deduplicate(docs)
+
+    docs = rerank_results(query, docs)
+
+    # fallback to web scraping
     if not docs:
 
-        scraped=scrape_celonis(query)
+        scraped = scrape_celonis_docs(query)
 
         if scraped:
 
-            chunks=[scraped[i:i+500] for i in range(0,len(scraped),500)]
+            add_dynamic_docs(scraped)
 
-            emb=EMBED_MODEL.encode(chunks)
-            emb=np.array(emb).astype("float32")
+            docs = [scraped]
 
-            dynamic_index.add(emb)
+    context = "\n\n".join(docs)
 
-            dynamic_meta.extend(chunks)
+    return context[:MAX_CONTEXT_CHARS]
 
-            faiss.write_index(dynamic_index,"dynamic_docs.index")
 
-            with open("dynamic_docs.pkl","wb") as f:
-                pickle.dump(dynamic_meta,f)
+# ==========================================================
+# FUNCTION DETECTION
+# ==========================================================
 
-            docs=chunks[:4]
+PQL_FUNCTIONS = [
+    "PU_FIRST","PU_LAST","PU_AVG","PU_SUM","PU_COUNT",
+    "PU_MIN","PU_MAX","PU_COUNT_DISTINCT",
+    "DATEDIFF","RUNNING_SUM","COUNT_TABLE",
+    "MOVING_AVG","REMAP","AVG","MEDIAN",
+    "SOURCE","TARGET","RUNNING_TOTAL"
+]
 
-    return "\n\n".join(docs)
+def detect_function(query):
+
+    q = query.upper()
+
+    for f in PQL_FUNCTIONS:
+
+        if re.search(rf"\b{f}\b", q):
+
+            return f
+
+    return None
+
+
+# ==========================================================
+# FUNCTION ROUTING
+# ==========================================================
+
+def route_function_doc(function_name):
+
+    normalized = function_name.lower().replace("_","-")
+
+    for item in docs_meta:
+
+        url = item.get("url","").lower()
+
+        if normalized in url:
+
+            return item["text"]
+
+    return None
+
+
+# ==========================================================
+# RETRIEVE CONTEXT
+# ==========================================================
+
+def retrieve_context(query):
+
+    func = detect_function(query)
+
+    if func:
+
+        routed = route_function_doc(func)
+
+        if routed:
+
+            return routed
+
+    context = hybrid_retrieve(query)
+
+    return context
+
+
+# ==========================================================
+# PART 3 — AGENT SYSTEM
+# ==========================================================
 
 # ==========================================================
 # INTENT AGENT
 # ==========================================================
 
-def classify_intent(prompt):
+def detect_intent(prompt):
 
-    p=prompt.lower()
+    p = prompt.lower()
 
-    if "write" in p or "generate" in p or "query" in p:
+    if any(x in p for x in ["write","generate","build","create","pql"]):
         return "pql_generation"
 
-    if "what is" in p or "explain" in p:
+    if any(x in p for x in ["what is","explain","definition"]):
         return "explanation"
 
-    if "process" in p or "cycle time" in p or "throughput":
+    if any(x in p for x in [
+        "cycle time","throughput","rework",
+        "bottleneck","process","variant"
+    ]):
         return "business_problem"
 
     return "general"
+
+
+# ==========================================================
+# QUERY REWRITE AGENT
+# ==========================================================
+
+def rewrite_query(prompt):
+
+    try:
+
+        r = client.chat.completions.create(
+            model = MODEL_FAST,
+            messages=[{
+                "role":"user",
+                "content":f"""
+Rewrite the following question using Celonis PQL terminology.
+
+Question:
+{prompt}
+
+Return only the rewritten search query.
+"""
+            }],
+            temperature=0,
+            max_tokens=100
+        )
+
+        return r.choices[0].message.content.strip()
+
+    except:
+
+        return prompt
+
+
+# ==========================================================
+# MULTI QUERY GENERATION
+# ==========================================================
+
+def generate_multi_queries(query):
+
+    try:
+
+        r = client.chat.completions.create(
+            model = MODEL_FAST,
+            messages=[{
+                "role":"user",
+                "content":f"""
+Generate 3 alternative Celonis documentation search queries.
+
+Query:
+{query}
+
+Return each query on a new line.
+"""
+            }],
+            temperature=0.3,
+            max_tokens=120
+        )
+
+        lines = r.choices[0].message.content.split("\n")
+
+        return [l.strip() for l in lines if l.strip()]
+
+    except:
+
+        return []
+
 
 # ==========================================================
 # PQL GENERATOR AGENT
@@ -238,70 +651,114 @@ def classify_intent(prompt):
 
 def generate_pql(prompt, context):
 
-    system="""
-You are a Celonis Process Mining expert.
-
-Write correct PQL.
+    system_prompt = """
+You are a senior Celonis Process Mining consultant.
 
 Rules:
-- Never use SQL
-- Quote tables and columns "Table"."Column"
-- Use correct Celonis functions
+- Only generate valid PQL
+- Never generate SQL
+- Quote tables like "Table"."Column"
+- Use official Celonis functions
 """
 
-    user=f"""
-Question:
+    user_prompt = f"""
+User question:
 {prompt}
 
-Reference:
+Reference context:
 {context}
 
-Write the PQL query and explanation.
+Write the PQL query and explain it.
 """
 
-    r=client.chat.completions.create(
-        model=MODEL_REASON,
+    r = client.chat.completions.create(
+
+        model = MODEL_REASON,
+
         messages=[
-            {"role":"system","content":system},
-            {"role":"user","content":user}
+            {"role":"system","content":system_prompt},
+            {"role":"user","content":user_prompt}
         ],
+
         temperature=0.2,
-        max_tokens=1200
+        max_tokens=800
     )
 
     return r.choices[0].message.content
+
 
 # ==========================================================
 # EXPLANATION AGENT
 # ==========================================================
 
-def explain(prompt, context):
+def explain_concept(prompt, context):
 
-    r=client.chat.completions.create(
-        model=MODEL_FAST,
+    r = client.chat.completions.create(
+
+        model = MODEL_FAST,
+
         messages=[
-            {"role":"system","content":"Explain Celonis concepts clearly."},
-            {"role":"user","content":f"{prompt}\n\n{context}"}
-        ]
+            {"role":"system","content":
+             "Explain Celonis concepts clearly."},
+            {"role":"user","content":
+             prompt + "\n\n" + context}
+        ],
+
+        temperature=0.2
     )
 
     return r.choices[0].message.content
 
+
 # ==========================================================
-# VALIDATOR
+# VALIDATION AGENT
 # ==========================================================
 
 def validate_pql(answer):
 
-    sql_words=["SELECT","FROM","WHERE","JOIN"]
+    sql_keywords = ["SELECT","FROM","WHERE","JOIN","GROUP BY"]
 
-    for w in sql_words:
+    for k in sql_keywords:
 
-        if w in answer.upper():
+        if k in answer.upper():
 
             return False
 
     return True
+
+
+# ==========================================================
+# TOOL ROUTER
+# ==========================================================
+
+def route_tools(intent):
+
+    if intent == "pql_generation":
+
+        return [
+            "retrieve_docs",
+            "generate_pql"
+        ]
+
+    if intent == "business_problem":
+
+        return [
+            "retrieve_docs",
+            "generate_pql"
+        ]
+
+    if intent == "explanation":
+
+        return [
+            "retrieve_docs",
+            "explain"
+        ]
+
+    return [
+        "retrieve_docs",
+        "explain"
+    ]
+
 
 # ==========================================================
 # QUERY PLANNER AGENT
@@ -309,78 +766,123 @@ def validate_pql(answer):
 
 def planner(prompt):
 
-    intent=classify_intent(prompt)
+    intent = detect_intent(prompt)
 
-    if intent=="pql_generation":
-        return ["retrieve_docs","generate_pql"]
+    tools = route_tools(intent)
 
-    if intent=="explanation":
-        return ["retrieve_docs","explain"]
+    log_event(f"Intent detected: {intent}")
+    log_event(f"Tools selected: {tools}")
 
-    if intent=="business_problem":
-        return ["retrieve_docs","generate_pql"]
+    return intent, tools
 
-    return ["explain"]
 
 # ==========================================================
-# EXECUTOR
+# EXECUTION ENGINE
 # ==========================================================
 
 def run_agent(prompt):
 
-    plan=planner(prompt)
+    intent, tools = planner(prompt)
 
-    context=""
+    rewritten = rewrite_query(prompt)
 
-    if "retrieve_docs" in plan:
+    queries = [rewritten] + generate_multi_queries(rewritten)
 
-        context=retrieve_docs(prompt)
+    context = ""
 
-    if "generate_pql" in plan:
+    if "retrieve_docs" in tools:
 
-        ans=generate_pql(prompt,context)
+        all_context = []
+
+        for q in queries:
+
+            all_context.append(
+                retrieve_context(q)
+            )
+
+        context = "\n\n".join(all_context)
+
+    if "generate_pql" in tools:
+
+        answer = generate_pql(prompt, context)
 
     else:
 
-        ans=explain(prompt,context)
+        answer = explain_concept(prompt, context)
 
-    if not validate_pql(ans):
+    if not validate_pql(answer):
 
-        ans="⚠ Generated SQL instead of PQL. Please refine the query."
+        answer = "⚠️ Generated SQL instead of valid PQL."
 
-    return ans
+    return answer
+
 
 # ==========================================================
 # STREAMLIT UI
 # ==========================================================
 
-st.title("🧠 Celonis Process Mining AI Agent")
+st.title("🧠 Celonis Process Mining AI Copilot")
+
+st.markdown(
+"""
+Ask questions about **Celonis**, **Process Mining**, or **PQL queries**.
+"""
+)
+
+# ==========================================================
+# SESSION STATE
+# ==========================================================
 
 if "messages" not in st.session_state:
-    st.session_state.messages=[]
+
+    st.session_state.messages = []
+
+# ==========================================================
+# CHAT HISTORY
+# ==========================================================
 
 for m in st.session_state.messages:
 
     with st.chat_message(m["role"]):
+
         st.markdown(m["content"])
 
-prompt=st.chat_input("Ask about Celonis, PQL, or your business process")
+
+# ==========================================================
+# USER INPUT
+# ==========================================================
+
+prompt = st.chat_input("Ask a Celonis question...")
+
 
 if prompt:
 
-    st.session_state.messages.append({"role":"user","content":prompt})
+    st.session_state.messages.append({
+        "role":"user",
+        "content":prompt
+    })
 
     with st.chat_message("user"):
+
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
 
-        with st.spinner("Agent thinking..."):
+        with st.spinner("Analyzing process knowledge..."):
 
-            answer=run_agent(prompt)
+            try:
+
+                answer = run_agent(prompt)
+
+            except Exception as e:
+
+                answer = f"⚠️ Error: {str(e)}"
 
             st.markdown(answer)
 
-    st.session_state.messages.append({"role":"assistant","content":answer})
+    st.session_state.messages.append({
+        "role":"assistant",
+        "content":answer
+    })
 
-    store_learning(prompt,answer)
+    store_learning(prompt, answer)
