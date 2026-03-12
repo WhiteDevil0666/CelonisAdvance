@@ -6,6 +6,7 @@ import numpy as np
 import pickle
 import re
 import base64
+import os
 from rank_bm25 import BM25Okapi
 
 # =====================================
@@ -14,8 +15,7 @@ from rank_bm25 import BM25Okapi
 
 st.set_page_config(
     page_title="Celonis Copilot",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    layout="wide"
 )
 
 # =====================================
@@ -23,69 +23,49 @@ st.set_page_config(
 # =====================================
 
 def set_background(image_file):
-    try:
-        with open(image_file, "rb") as f:
-            encoded = base64.b64encode(f.read()).decode()
 
-        page_bg = f"""
+    try:
+
+        with open(image_file,"rb") as f:
+            encoded=base64.b64encode(f.read()).decode()
+
+        page_bg=f"""
         <style>
         .stApp {{
-            background:
-            linear-gradient(rgba(0,0,0,0.85), rgba(0,0,0,0.85)),
-            url("data:image/png;base64,{encoded}");
-            background-size: cover;
-            background-position: center;
-            background-attachment: fixed;
-        }}
-
-        .main {{
-            background-color: transparent !important;
-        }}
-
-        section.main > div {{
-            background-color: transparent !important;
-        }}
-
-        .block-container {{
-            padding-top: 2rem;
-            padding-bottom: 0rem;
-        }}
-
-        .stChatMessage {{
-            background-color: rgba(20,20,30,0.85);
-            border-radius: 12px;
-            padding: 12px;
-        }}
-
-        div[data-testid="stChatInput"] {{
-            background-color: rgba(20,20,30,0.95);
-            border-radius: 12px;
-            padding: 8px;
-        }}
-
-        section[data-testid="stSidebar"] {{
-            background-color: rgba(15,15,25,0.95);
+        background:
+        linear-gradient(rgba(0,0,0,0.85), rgba(0,0,0,0.85)),
+        url("data:image/png;base64,{encoded}");
+        background-size:cover;
+        background-position:center;
         }}
 
         h1,h2,h3,p,div,span {{
-            color:white !important;
+        color:white !important;
+        }}
+
+        .stChatMessage {{
+        background:rgba(20,20,30,0.85);
+        border-radius:10px;
+        padding:12px;
         }}
 
         </style>
         """
-        st.markdown(page_bg, unsafe_allow_html=True)
 
-    except Exception:
+        st.markdown(page_bg,unsafe_allow_html=True)
+
+    except:
         pass
 
 set_background("background.png")
 
 # =====================================
-# CONFIG
+# GROQ CONFIG
 # =====================================
 
-MODEL_NAME = "llama-3.1-8b-instant"
-client = Groq(api_key=st.secrets["GROQ_API_KEY"])
+MODEL="llama-3.1-8b-instant"
+
+client=Groq(api_key=st.secrets["GROQ_API_KEY"])
 
 # =====================================
 # LOAD MODELS
@@ -93,87 +73,99 @@ client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
 @st.cache_resource
 def load_models():
-    embed = SentenceTransformer("all-MiniLM-L6-v2")
-    reranker = CrossEncoder("BAAI/bge-reranker-base")
-    return embed, reranker
 
-EMBED_MODEL, RERANK_MODEL = load_models()
+    embed=SentenceTransformer("all-MiniLM-L6-v2")
 
-# =====================================
-# SYSTEM PROMPT
-# =====================================
+    reranker=CrossEncoder("BAAI/bge-reranker-base")
 
-SYSTEM_PROMPT = """
-You are a Senior Celonis Process Mining Consultant.
+    return embed,reranker
 
-Rules:
-- Use provided documentation context strictly.
-- Preserve official PQL syntax EXACTLY.
-- Do NOT convert PQL into SQL.
-- Do NOT invent functions or examples.
-- Never use SQL keywords like SELECT, FROM, WHERE, JOIN.
-- If answer not found say:
-  "Not found in official Celonis documentation."
-- Priority: Technical Accuracy > Simplicity.
-"""
+EMBED_MODEL,RERANK_MODEL=load_models()
 
 # =====================================
 # LOAD VECTOR STORES
 # =====================================
 
 @st.cache_resource
-def load_all_stores():
+def load_kb():
 
-    docs_index = faiss.read_index("pql_faiss.index")
+    docs_index=faiss.read_index("pql_faiss.index")
 
     with open("pql_metadata.pkl","rb") as f:
-        docs_metadata = pickle.load(f)
+        docs_metadata=pickle.load(f)
 
-    qa_index = faiss.read_index("pql_knowledge.index")
+    qa_index=faiss.read_index("pql_knowledge.index")
 
     with open("pql_knowledge.pkl","rb") as f:
-        qa_metadata = pickle.load(f)
+        qa_metadata=pickle.load(f)
 
-    docs_corpus = [re.findall(r"\w+", item["text"].lower()) for item in docs_metadata]
-    qa_corpus   = [re.findall(r"\w+", item.lower()) for item in qa_metadata]
+    docs_tokens=[re.findall(r"\w+",i["text"].lower()) for i in docs_metadata]
 
-    docs_bm25 = BM25Okapi(docs_corpus)
-    qa_bm25   = BM25Okapi(qa_corpus)
+    qa_tokens=[re.findall(r"\w+",i.lower()) for i in qa_metadata]
 
-    return docs_index, docs_metadata, docs_bm25, qa_index, qa_metadata, qa_bm25
+    docs_bm25=BM25Okapi(docs_tokens)
 
+    qa_bm25=BM25Okapi(qa_tokens)
 
-docs_index, docs_metadata, docs_bm25, qa_index, qa_metadata, qa_bm25 = load_all_stores()
+    return docs_index,docs_metadata,docs_bm25,qa_index,qa_metadata,qa_bm25
 
-# =====================================
-# SESSION STATE
-# =====================================
-
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-
-if "last_rewritten" not in st.session_state:
-    st.session_state.last_rewritten = ""
+docs_index,docs_metadata,docs_bm25,qa_index,qa_metadata,qa_bm25=load_kb()
 
 # =====================================
-# FUNCTION DETECTION (REGEX)
+# SELF LEARNING STORAGE
 # =====================================
 
-def detect_pql_function(prompt):
+LEARN_FILE="learned_examples.pkl"
 
-    functions = [
-        "PU_FIRST","PU_LAST","PU_AVG","PU_SUM","PU_COUNT",
-        "PU_MIN","PU_MAX","PU_COUNT_DISTINCT",
-        "DATEDIFF","RUNNING_SUM","COUNT_TABLE",
-        "MOVING_AVG","REMAP","AVG","MEDIAN",
-        "SOURCE","TARGET","RUNNING_TOTAL"
+if os.path.exists(LEARN_FILE):
+
+    with open(LEARN_FILE,"rb") as f:
+        learned_examples=pickle.load(f)
+
+else:
+
+    learned_examples=[]
+
+# =====================================
+# INTENT DETECTION
+# =====================================
+
+def detect_example_request(prompt):
+
+    keywords=[
+        "example",
+        "examples",
+        "use case",
+        "industry",
+        "business",
+        "scenario",
+        "real world"
     ]
 
-    prompt_upper = prompt.upper()
+    p=prompt.lower()
+
+    for k in keywords:
+        if k in p:
+            return True
+
+    return False
+
+# =====================================
+# FUNCTION DETECTION
+# =====================================
+
+def detect_function(prompt):
+
+    functions=[
+    "PU_FIRST","PU_LAST","PU_AVG","PU_SUM","PU_COUNT",
+    "DATEDIFF","RUNNING_SUM","COUNT_TABLE"
+    ]
+
+    prompt=prompt.upper()
 
     for f in functions:
-        pattern = rf"\b{f}\b"
-        if re.search(pattern, prompt_upper):
+
+        if re.search(rf"\b{f}\b",prompt):
             return f
 
     return None
@@ -182,14 +174,14 @@ def detect_pql_function(prompt):
 # FUNCTION ROUTING
 # =====================================
 
-def function_routing(function_name):
+def function_routing(f):
 
-    normalized = function_name.lower().replace("_","-")
+    normalized=f.lower().replace("_","-")
 
     for item in docs_metadata:
-        url = item.get("url","").lower()
 
-        if normalized in url or function_name.lower() in url:
+        if normalized in item.get("url","").lower():
+
             return item["text"]
 
     return None
@@ -202,328 +194,253 @@ def rewrite_query(prompt):
 
     try:
 
-        response = client.chat.completions.create(
-            model=MODEL_NAME,
+        r=client.chat.completions.create(
+            model=MODEL,
             messages=[{
                 "role":"user",
-                "content":f"""
-Rewrite the question into Celonis PQL terminology.
-
-Question: {prompt}
-
-Return only rewritten query.
-"""
+                "content":f"Rewrite for Celonis PQL search: {prompt}"
             }],
-            temperature=0,
-            max_tokens=120
+            temperature=0
         )
 
-        return response.choices[0].message.content.strip()
+        return r.choices[0].message.content.strip()
 
-    except Exception:
+    except:
+
         return prompt
 
 # =====================================
-# MULTI QUERY GENERATION
+# MULTI QUERY
 # =====================================
 
-def generate_multi_queries(query):
+def generate_queries(q):
 
     try:
 
-        response = client.chat.completions.create(
-            model=MODEL_NAME,
+        r=client.chat.completions.create(
+            model=MODEL,
             messages=[{
                 "role":"user",
-                "content":f"""
-Generate 3 alternative search queries.
-
-Original Query:
-{query}
-
-Return 3 lines only.
-"""
-            }],
-            temperature=0.3,
-            max_tokens=120
+                "content":f"Generate 3 search queries for: {q}"
+            }]
         )
 
-        queries = response.choices[0].message.content.strip().split("\n")
+        return r.choices[0].message.content.split("\n")[:3]
 
-        return [q.strip() for q in queries if q.strip()][:3]
+    except:
 
-    except Exception:
         return []
 
 # =====================================
-# WEIGHTED HYBRID SEARCH
+# HYBRID SEARCH
 # =====================================
 
-def hybrid_search(query, top_k=6):
+def hybrid_search(query):
 
-    query_embedding = EMBED_MODEL.encode([query])
-    query_np = np.array(query_embedding).astype("float32")
+    emb=EMBED_MODEL.encode([query])
 
-    tokens = re.findall(r"\w+", query.lower())
+    emb=np.array(emb).astype("float32")
 
-    results = []
+    tokens=re.findall(r"\w+",query.lower())
 
-    # ===== DOCS SEMANTIC =====
-    D_docs, I_docs = docs_index.search(query_np, top_k)
+    results=[]
 
-    for score, idx in zip(D_docs[0], I_docs[0]):
+    D,I=docs_index.search(emb,6)
 
-        if idx < len(docs_metadata):
+    for s,i in zip(D[0],I[0]):
 
-            results.append({
-                "text": docs_metadata[idx]["text"],
-                "score": float(score) * 0.7
-            })
-
-    # ===== DOCS BM25 =====
-    bm25_scores = docs_bm25.get_scores(tokens)
-
-    top_doc_bm25 = np.argsort(bm25_scores)[::-1][:top_k]
-
-    for i in top_doc_bm25:
-
-        if bm25_scores[i] > 0:
+        if i<len(docs_metadata):
 
             results.append({
-                "text": docs_metadata[i]["text"],
-                "score": float(bm25_scores[i]) * 0.3
+            "text":docs_metadata[i]["text"],
+            "score":float(s)*0.7
             })
 
-    # ===== QA SEMANTIC =====
-    D_qa, I_qa = qa_index.search(query_np, top_k)
+    bm=docs_bm25.get_scores(tokens)
 
-    for score, idx in zip(D_qa[0], I_qa[0]):
+    top=np.argsort(bm)[::-1][:6]
 
-        if idx < len(qa_metadata):
+    for i in top:
 
-            results.append({
-                "text": qa_metadata[idx],
-                "score": float(score) * 0.7
-            })
+        results.append({
+        "text":docs_metadata[i]["text"],
+        "score":float(bm[i])*0.3
+        })
 
-    # ===== QA BM25 =====
-    bm25_scores = qa_bm25.get_scores(tokens)
+    ranked=sorted(results,key=lambda x:x["score"],reverse=True)
 
-    top_qa_bm25 = np.argsort(bm25_scores)[::-1][:top_k]
-
-    for i in top_qa_bm25:
-
-        if bm25_scores[i] > 0:
-
-            results.append({
-                "text": qa_metadata[i],
-                "score": float(bm25_scores[i]) * 0.3
-            })
-
-    ranked = sorted(results, key=lambda x: x["score"], reverse=True)
-
-    return [r["text"] for r in ranked[:top_k]]
-
-# =====================================
-# DEDUPLICATION
-# =====================================
-
-def deduplicate(docs):
-
-    seen=set()
-    unique=[]
-
-    for doc in docs:
-
-        key=doc[:120]
-
-        if key not in seen:
-            seen.add(key)
-            unique.append(doc)
-
-    return unique
+    return [r["text"] for r in ranked[:6]]
 
 # =====================================
 # RERANK
 # =====================================
 
-def rerank_results(query,docs,top_k=4):
+def rerank(query,docs):
 
-    if not docs:
-        return []
-
-    pairs=[[query,doc] for doc in docs]
+    pairs=[[query,d] for d in docs]
 
     scores=RERANK_MODEL.predict(pairs)
 
-    ranked=[doc for _,doc in sorted(zip(scores,docs),reverse=True)]
+    ranked=[d for _,d in sorted(zip(scores,docs),reverse=True)]
 
-    return ranked[:top_k]
+    return ranked[:4]
 
 # =====================================
-# RETRIEVAL PIPELINE
+# CONTEXT RETRIEVAL
 # =====================================
 
 def retrieve_context(prompt):
 
-    func = detect_pql_function(prompt)
+    f=detect_function(prompt)
 
-    if func:
-        routed_doc=function_routing(func)
+    if f:
 
-        if routed_doc:
-            st.session_state.last_rewritten=f"[Function Routing → {func}]"
-            return routed_doc,func
+        r=function_routing(f)
 
-    rewritten = rewrite_query(prompt)
+        if r:
+            return r
 
-    st.session_state.last_rewritten = rewritten
+    rewritten=rewrite_query(prompt)
 
-    alt_queries = generate_multi_queries(rewritten)
+    queries=[rewritten]+generate_queries(rewritten)
 
-    all_queries = [rewritten] + alt_queries
+    docs=[]
 
-    all_docs=[]
+    for q in queries:
 
-    for q in all_queries:
-        all_docs += hybrid_search(q)
+        docs+=hybrid_search(q)
 
-    all_docs = deduplicate(all_docs)
+    docs=list(dict.fromkeys(docs))
 
-    top_docs = rerank_results(rewritten, all_docs)
+    docs=rerank(rewritten,docs)
 
-    compressed_docs=[doc[:1200] for doc in top_docs]
+    docs=[d[:1200] for d in docs]
 
-    context="\n\n".join(compressed_docs)
-
-    return context, rewritten
+    return "\n\n".join(docs)
 
 # =====================================
-# SIDEBAR
+# EXPERT MODE
 # =====================================
 
-with st.sidebar:
+EXPERT_PROMPT="""
+You are a senior Celonis Process Mining consultant.
 
-    st.markdown("## 🧠 Celonis Copilot")
+Explain functions using business scenarios.
 
-    st.markdown("---")
+Provide examples from:
 
-    st.markdown("Pipeline:")
+Manufacturing
+Finance
+Procurement
+Supply Chain
+Order to Cash
+"""
 
-    st.markdown("""
-Function Routing  
-Query Rewrite  
-Multi Query Generation  
-Hybrid Retrieval  
-Cross Encoder Rerank  
-Context Compression
-""")
+# =====================================
+# SYSTEM PROMPT
+# =====================================
 
-    st.markdown("---")
+SYSTEM_PROMPT="""
+You are a Celonis documentation expert.
 
-    st.markdown(f"Docs chunks: {len(docs_metadata)}")
+Answer strictly from context.
 
-    st.markdown(f"PQL examples: {len(qa_metadata)}")
+If not found say:
+Not found in official Celonis documentation.
+"""
 
-    if st.session_state.last_rewritten:
+# =====================================
+# SELF LEARNING
+# =====================================
 
-        st.markdown("Rewritten Query:")
+def store_learning(question,answer):
 
-        st.info(st.session_state.last_rewritten)
+    if len(answer)>200:
 
-    if st.button("Clear Chat"):
+        learned_examples.append({
+        "q":question,
+        "a":answer
+        })
 
-        st.session_state.messages=[]
+        with open(LEARN_FILE,"wb") as f:
+            pickle.dump(learned_examples,f)
 
-        st.session_state.last_rewritten=""
+# =====================================
+# CHAT STATE
+# =====================================
 
-        st.rerun()
-
-    st.caption("Powered by Divyansh")
+if "messages" not in st.session_state:
+    st.session_state.messages=[]
 
 # =====================================
 # UI
 # =====================================
 
-st.title("🧠 Celonis Process Mining Copilot")
-
-st.markdown("Ask questions about **PQL**, **Celonis**, or **Process Mining**")
+st.title("🧠 Celonis Copilot")
 
 # =====================================
-# CHAT HISTORY
+# HISTORY
 # =====================================
 
 for m in st.session_state.messages:
 
     with st.chat_message(m["role"]):
+
         st.markdown(m["content"])
 
 # =====================================
 # CHAT INPUT
 # =====================================
 
-if prompt := st.chat_input("Ask a question..."):
+if prompt:=st.chat_input("Ask Celonis question..."):
 
     st.session_state.messages.append({"role":"user","content":prompt})
 
     with st.chat_message("user"):
+
         st.markdown(prompt)
 
-    context, rewritten = retrieve_context(prompt)
+    example_mode=detect_example_request(prompt)
 
-    final_prompt=f"""
-Original Question:
+    if example_mode:
+
+        messages=[
+        {"role":"system","content":EXPERT_PROMPT},
+        {"role":"user","content":prompt}
+        ]
+
+    else:
+
+        context=retrieve_context(prompt)
+
+        final_prompt=f"""
+Question:
 {prompt}
 
-Search Query Used:
-{rewritten}
-
-Documentation Context:
+Context:
 {context}
-
-Answer using ONLY the documentation above.
 """
 
-    api_messages=[{"role":"system","content":SYSTEM_PROMPT}]
-
-    for m in st.session_state.messages[:-1]:
-
-        api_messages.append({
-            "role":m["role"],
-            "content":m["content"]
-        })
-
-    api_messages.append({
-        "role":"user",
-        "content":final_prompt
-    })
-
-    reply=""
+        messages=[
+        {"role":"system","content":SYSTEM_PROMPT},
+        {"role":"user","content":final_prompt}
+        ]
 
     with st.chat_message("assistant"):
 
-        with st.spinner("Analyzing..."):
+        with st.spinner("Thinking..."):
 
-            try:
+            r=client.chat.completions.create(
+            model=MODEL,
+            messages=messages,
+            temperature=0.2,
+            max_tokens=1500
+            )
 
-                response=client.chat.completions.create(
-                    model=MODEL_NAME,
-                    messages=api_messages,
-                    temperature=0.1,
-                    max_tokens=1500
-                )
+            answer=r.choices[0].message.content
 
-                reply=response.choices[0].message.content
+            st.markdown(answer)
 
-                st.markdown(reply)
+    st.session_state.messages.append({"role":"assistant","content":answer})
 
-            except Exception as e:
-
-                reply=f"Error contacting Groq API: {str(e)}"
-
-                st.error(reply)
-
-    st.session_state.messages.append({
-        "role":"assistant",
-        "content":reply
-    })
+    store_learning(prompt,answer)
