@@ -564,17 +564,43 @@ def detect_intent(prompt):
 
     p = prompt.lower()
 
-    if any(x in p for x in ["write","generate","build","create","pql"]):
+    if any(x in p for x in [
+        "write pql",
+        "generate pql",
+        "give pql",
+        "pql query",
+        "calculate",
+        "how to calculate"
+    ]):
         return "pql_generation"
 
-    if any(x in p for x in ["what is","explain","definition"]):
-        return "explanation"
+    if any(x in p for x in [
+        "what is",
+        "explain",
+        "definition",
+        "meaning"
+    ]):
+        return "concept_explanation"
 
     if any(x in p for x in [
-        "cycle time","throughput","rework",
-        "bottleneck","process","variant"
+        "cycle time",
+        "throughput",
+        "bottleneck",
+        "rework",
+        "kpi"
     ]):
         return "business_problem"
+
+    if any(x in p for x in [
+        "connect",
+        "connection",
+        "on premise",
+        "setup",
+        "installation",
+        "data job",
+        "extractor"
+    ]):
+        return "platform_help"
 
     return "general"
 
@@ -716,13 +742,21 @@ def explain_concept(prompt, context):
 
 def validate_pql(answer):
 
-    sql_keywords = ["SELECT","FROM","WHERE","JOIN","GROUP BY"]
+    import re
 
-    for k in sql_keywords:
+    code_blocks = re.findall(r"```(.*?)```", answer, re.DOTALL)
 
-        if k in answer.upper():
+    if not code_blocks:
+        return True
 
-            return False
+    sql_keywords = ["SELECT", "FROM", "WHERE", "JOIN", "GROUP BY"]
+
+    for block in code_blocks:
+        upper = block.upper()
+
+        for kw in sql_keywords:
+            if kw in upper:
+                return False
 
     return True
 
@@ -734,30 +768,18 @@ def validate_pql(answer):
 def route_tools(intent):
 
     if intent == "pql_generation":
-
-        return [
-            "retrieve_docs",
-            "generate_pql"
-        ]
+        return ["retrieve_docs","generate_pql"]
 
     if intent == "business_problem":
+        return ["retrieve_docs","generate_pql"]
 
-        return [
-            "retrieve_docs",
-            "generate_pql"
-        ]
+    if intent == "concept_explanation":
+        return ["retrieve_docs","explain"]
 
-    if intent == "explanation":
+    if intent == "platform_help":
+        return ["explain"]
 
-        return [
-            "retrieve_docs",
-            "explain"
-        ]
-
-    return [
-        "retrieve_docs",
-        "explain"
-    ]
+    return ["retrieve_docs","explain"]
 
 
 # ==========================================================
@@ -886,3 +908,4 @@ if prompt:
     })
 
     store_learning(prompt, answer)
+
