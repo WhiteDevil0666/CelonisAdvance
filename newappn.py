@@ -924,7 +924,6 @@ for m in st.session_state.messages:
 
 prompt = st.chat_input("Ask a Celonis question...")
 
-
 if prompt:
 
     st.session_state.messages.append({
@@ -933,7 +932,6 @@ if prompt:
     })
 
     with st.chat_message("user"):
-
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
@@ -946,4 +944,13 @@ if prompt:
 
             except Exception as e:
 
-                answer = f"⚠
+                answer = f"⚠️ Error: {str(e)}"
+
+            st.markdown(answer)
+
+    st.session_state.messages.append({
+        "role":"assistant",
+        "content":answer
+    })
+
+    store_learning(prompt, answer)
