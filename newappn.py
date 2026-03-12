@@ -178,47 +178,80 @@ if "last_rewritten" not in st.session_state:
     st.session_state.last_rewritten = ""
 
 # =====================================
-# INTENT CLASSIFIER
+# INTENT + SCOPE CLASSIFIER
 # =====================================
+
+# FIX 1: Added out-of-scope detection so non-PQL questions
+# (like UI setup, connections, admin tasks) don't get polluted
+# with irrelevant PQL context injected from the knowledge base.
 
 def classify_intent(prompt):
     """
-    Classify what the user wants so we respond appropriately.
-    Returns one of:
-      - 'write_pql'     : user wants a PQL query written
-      - 'explain_pql'   : user wants to understand a PQL function/concept
-      - 'business_process' : user describes a business problem, wants PQL help
-      - 'general'       : general Celonis / process mining question
+    Returns a tuple: (intent, is_pql_related)
+
+    intent options:
+      - 'write_pql'        : user wants a PQL query written
+      - 'explain_pql'      : user wants to understand PQL function/concept
+      - 'business_process' : business problem needing PQL solution
+      - 'platform_help'    : Celonis UI, setup, connectors, admin — NO PQL injection
+      - 'general'          : general process mining / Celonis question
+
+    is_pql_related:
+      - True  → retrieve docs/examples from knowledge base to enhance answer
+      - False → answer directly, do NOT inject PQL context (prevents confusion)
     """
     p = prompt.lower()
 
-    write_signals = [
-        "write", "create", "generate", "build", "give me",
-        "pql for", "query for", "how to calculate", "how do i calculate",
-        "compute", "get the value", "find the", "show me the query"
+    # --- Out-of-scope: Platform/Admin/Setup questions ---
+    # These should be answered cleanly without PQL context injection
+    platform_signals = [
+        "connection", "connect", "on-premise", "on premise", "connector",
+        "install", "installation", "setup", "configure", "configuration",
+        "login", "sign in", "account", "permission", "role", "user management",
+        "data pool", "data job", "transformation", "extractor",
+        "upload", "import", "export", "download",
+        "celonis studio", "process hub", "action flow", "app",
+        "notification", "alert", "schedule", "automation",
+        "sap extractor", "jdbc", "api key", "token", "oauth",
+        "how to access", "where do i", "how do i open", "navigate",
+        "dashboard", "workspace", "tenant", "deployment"
     ]
+    if any(s in p for s in platform_signals):
+        return "platform_help", False
 
+    # --- Write PQL ---
+    write_signals = [
+        "write", "create", "generate", "build", "give me a query",
+        "pql for", "query for", "how to calculate", "how do i calculate",
+        "compute", "get the value of", "find the", "show me the query",
+        "calculate the", "what pql"
+    ]
+    if any(s in p for s in write_signals):
+        return "write_pql", True
+
+    # --- Explain PQL ---
     explain_signals = [
         "what is", "explain", "how does", "what does", "difference between",
-        "when to use", "why use", "what are", "definition", "syntax of"
+        "when to use", "why use", "what are", "definition of", "syntax of",
+        "how to use"
     ]
+    if any(s in p for s in explain_signals):
+        return "explain_pql", True
 
+    # --- Business process ---
     business_signals = [
         "order to cash", "purchase to pay", "procure to pay", "p2p", "o2c",
         "lead time", "cycle time", "throughput time", "rework", "bottleneck",
         "conformance", "deviation", "invoice", "shipment", "delivery",
         "supplier", "customer", "vendor", "payment", "approval",
         "manufacturing", "finance", "supply chain", "procurement",
-        "accounts payable", "accounts receivable", "sla", "kpi", "metric"
+        "accounts payable", "accounts receivable", "sla", "kpi", "metric",
+        "process variant", "happy path", "case duration"
     ]
-
-    if any(s in p for s in write_signals):
-        return "write_pql"
-    if any(s in p for s in explain_signals):
-        return "explain_pql"
     if any(s in p for s in business_signals):
-        return "business_process"
-    return "general"
+        return "business_process", True
+
+    return "general", True
 
 # =====================================
 # PQL FUNCTION DETECTION
@@ -227,7 +260,8 @@ def classify_intent(prompt):
 def detect_function(prompt):
     functions = [
         "PU_FIRST", "PU_LAST", "PU_AVG", "PU_SUM", "PU_COUNT",
-        "PU_MIN", "PU_MAX", "PU_COUNT_DISTINCT",
+        "PU_MIN", "PU_MAX", "PU_COUNT_DISTINCT", "PU_STRING_AGG",
+        "PU_MEDIAN", "PU_VAR", "PU_STDEV",
         "DATEDIFF", "RUNNING_SUM", "COUNT_TABLE",
         "MOVING_AVG", "REMAP", "SOURCE", "TARGET",
         "RUNNING_TOTAL", "AVG", "MEDIAN", "FILTER"
@@ -310,7 +344,8 @@ def hybrid_search(query, top_k=5):
     D, I = docs_index.search(emb, top_k)
     for dist, idx in zip(D[0], I[0]):
         if idx < len(docs_metadata):
-            results.append({"text": docs_metadata[idx]["text"], "score": (1/(1+float(dist))) * 0.6})
+            results.append({"text": docs_metadata[idx]["text"],
+                            "score": (1 / (1 + float(dist))) * 0.6})
 
     # Docs: BM25
     bm = docs_bm25.get_scores(tokens)
@@ -318,13 +353,15 @@ def hybrid_search(query, top_k=5):
     max_bm = bm[top_bm[0]] if bm[top_bm[0]] > 0 else 1
     for i in top_bm:
         if bm[i] > 0:
-            results.append({"text": docs_metadata[i]["text"], "score": (bm[i]/max_bm) * 0.4})
+            results.append({"text": docs_metadata[i]["text"],
+                            "score": (bm[i] / max_bm) * 0.4})
 
     # QA: Semantic
     D2, I2 = qa_index.search(emb, top_k)
     for dist, idx in zip(D2[0], I2[0]):
         if idx < len(qa_metadata):
-            results.append({"text": qa_metadata[idx], "score": (1/(1+float(dist))) * 0.6})
+            results.append({"text": qa_metadata[idx],
+                            "score": (1 / (1 + float(dist))) * 0.6})
 
     # QA: BM25
     bm2 = qa_bm25.get_scores(tokens)
@@ -332,7 +369,8 @@ def hybrid_search(query, top_k=5):
     max_bm2 = bm2[top_bm2[0]] if bm2[top_bm2[0]] > 0 else 1
     for i in top_bm2:
         if bm2[i] > 0:
-            results.append({"text": qa_metadata[i], "score": (bm2[i]/max_bm2) * 0.4})
+            results.append({"text": qa_metadata[i],
+                            "score": (bm2[i] / max_bm2) * 0.4})
 
     ranked = sorted(results, key=lambda x: x["score"], reverse=True)
     return [r["text"] for r in ranked[:top_k]]
@@ -367,11 +405,7 @@ def rerank(query, docs, top_k=4):
 # =====================================
 
 def retrieve_reference(prompt):
-    """
-    Fetches relevant docs/examples from the knowledge base.
-    This is used as ENHANCEMENT to LLM knowledge, not a strict constraint.
-    """
-    # Try exact function routing first
+    """Only called when is_pql_related=True."""
     func = detect_function(prompt)
     if func:
         routed = function_routing(func)
@@ -379,7 +413,6 @@ def retrieve_reference(prompt):
             st.session_state.last_rewritten = f"[Direct routing → {func}]"
             return routed
 
-    # Rewrite + multi-query + hybrid search + rerank
     rewritten = rewrite_query(prompt)
     st.session_state.last_rewritten = rewritten
 
@@ -388,10 +421,9 @@ def retrieve_reference(prompt):
     for q in all_queries:
         all_docs += hybrid_search(q, top_k=4)
 
-    all_docs = deduplicate(all_docs)
-    top_docs = rerank(rewritten, all_docs, top_k=4)
-
-    learned = search_learned(prompt)
+    all_docs  = deduplicate(all_docs)
+    top_docs  = rerank(rewritten, all_docs, top_k=4)
+    learned   = search_learned(prompt)
 
     parts = [d[:1200] for d in top_docs]
     if learned:
@@ -400,54 +432,82 @@ def retrieve_reference(prompt):
     return "\n\n".join(parts)[:6000]
 
 # =====================================
-# SYSTEM PROMPT — LLM-FIRST APPROACH
+# SYSTEM PROMPTS
 # =====================================
 
-# This is the key change: LLM is the expert, docs are reference material.
-# The model is free to answer using its own knowledge AND enhance with docs.
+# FIX 2 & 3: Tighter PQL syntax rules + self-verification instruction
+# so the model checks its own explanation matches the query it wrote.
 
-SYSTEM_PROMPT = """
-You are an expert Celonis Process Mining Consultant and PQL (Process Query Language) specialist.
+PQL_SYSTEM_PROMPT = """
+You are an expert Celonis Process Mining Consultant and PQL specialist.
 
-You have deep knowledge of:
-- Celonis platform and its capabilities
-- PQL syntax, functions, and best practices
-- Business processes: Order to Cash, Procure to Pay, Accounts Payable,
-  Accounts Receivable, Manufacturing, Supply Chain, Finance
-- Process mining concepts: case tables, activity tables, event logs,
-  throughput time, conformance checking, rework, bottlenecks, variants
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+STRICT PQL SYNTAX RULES — NEVER VIOLATE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-YOUR BEHAVIOR:
+1. PQL is NOT SQL. Never use: SELECT, FROM, WHERE, JOIN, GROUP BY, HAVING.
 
-1. ANSWERING QUESTIONS:
-   - Answer confidently using your expert knowledge
-   - Use the "Reference Material" provided to enhance and verify your answers
-   - If reference material has exact syntax, always use it precisely
-   - Do NOT say "not found in documentation" when you know the answer from expertise
+2. Always quote table and column names with double quotes:
+   ✅ "TableName"."ColumnName"
+   ❌ TableName.ColumnName
 
-2. WRITING PQL QUERIES:
-   - When user asks for a PQL query, ALWAYS write one
-   - Use official PQL syntax: functions like PU_AVG, DATEDIFF, COUNT_TABLE etc.
-   - Always wrap table names and column names in double quotes: "TableName"."ColumnName"
-   - Format queries clearly in a code block
-   - Explain what each part does after the query
+3. Pull-Up function syntax (PU_*):
+   PU_FUNCTION ( target_table, source_table.column [, filter] [ORDER BY col ASC|DESC] )
+   Example:
+   PU_AVG ( "CaseTable", "ActivityTable"."Duration" )
+   PU_FIRST ( "CaseTable", "ActivityTable"."Activity", ORDER BY "ActivityTable"."Eventtime" ASC )
 
-3. BUSINESS PROCESS QUESTIONS:
-   - Map the business problem to the correct PQL approach
-   - Example: "throughput time" → DATEDIFF between first and last activity
-   - Suggest the right tables and columns for common process types
+4. DATEDIFF syntax:
+   DATEDIFF ( time_unit, "Table"."StartColumn", "Table"."EndColumn" )
+   Example:
+   DATEDIFF ( HOURS, "Cases"."CreateDate", "Cases"."CloseDate" )
 
-4. IMPORTANT PQL RULES:
-   - PQL is NOT SQL — never use SELECT, FROM, WHERE, JOIN
-   - Functions work on event log data: case tables and activity tables
-   - Pull-up functions (PU_*) aggregate from a lower-grain to higher-grain table
-   - FILTER is a PQL keyword, not a SQL WHERE clause
-   - Column references always: "TABLE"."COLUMN"
+5. FILTER syntax (PQL FILTER, not SQL WHERE):
+   FILTER "Table"."Column" = 'value'
 
-5. TONE:
-   - Be helpful, practical, and clear
-   - Give working examples whenever possible
-   - For complex queries, explain step by step
+6. COUNT_TABLE syntax:
+   COUNT_TABLE ( "TableName" )
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SELF-VERIFICATION RULE — ALWAYS APPLY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+After writing ANY PQL query, before giving the explanation:
+- Re-read your query carefully
+- Check each argument in the function matches what you explain
+- Check argument order matches official syntax
+- If your explanation says "argument 2 is X", verify argument 2 in the
+  query IS actually X — fix if wrong
+- Never describe an argument as something it is not
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+BEHAVIOR
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+- Answer confidently using expert knowledge + reference material
+- Always write PQL when asked — never refuse
+- If reference material has exact syntax, use it precisely
+- Map business problems to correct PQL approach
+- Format every PQL query in a code block
+- Explain what each argument does AFTER verifying query is correct
+- Keep explanations concise and practical
+"""
+
+# FIX 1: Separate clean prompt for platform/admin questions
+# No PQL context injected — prevents mixing UI answers with random PQL
+PLATFORM_SYSTEM_PROMPT = """
+You are a Celonis platform expert.
+
+Answer questions about Celonis platform setup, configuration, connections,
+data jobs, extractors, Studio, Process Hub, and administration clearly.
+
+Rules:
+- Give step-by-step guidance where appropriate
+- Be practical and direct
+- Do NOT include PQL queries unless the user specifically asks for them
+- If you are unsure about a specific UI step that may have changed,
+  advise the user to check the official Celonis documentation at:
+  https://docs.celonis.com
 """
 
 # =====================================
@@ -455,17 +515,12 @@ YOUR BEHAVIOR:
 # =====================================
 
 def build_prompt(prompt, intent, reference):
-    """
-    Builds the final user message based on classified intent.
-    Reference docs always included but framed as enhancement, not constraint.
-    """
-
-    base = f"User Question:\n{prompt}\n\n"
-
+    base    = f"User Question:\n{prompt}\n\n"
     ref_block = ""
+
     if reference.strip():
         ref_block = f"""Reference Material from Celonis Documentation:
-(Use this to verify syntax and enhance your answer.
+(Use this to verify and enhance your answer.
 You are NOT limited to only this material — use your expert knowledge too.)
 ---
 {reference}
@@ -473,37 +528,36 @@ You are NOT limited to only this material — use your expert knowledge too.)
 
 """
 
-    if intent == "write_pql":
-        instruction = """Task: Write a PQL query that solves the user's request.
-- Provide the complete PQL query in a code block
-- Explain what each function/part does
-- Mention which tables/columns are typically used for this in Celonis
-- If multiple approaches exist, show the best one and mention alternatives
+    instructions = {
+        "write_pql": """Task: Write the PQL query that solves the user's request.
+1. Write the complete PQL query in a code block
+2. Self-verify: re-read the query and confirm every argument is correct
+3. Explain each argument accurately (must match the query exactly)
+4. Mention which tables/columns are typically used for this in Celonis
+5. If multiple approaches exist, show the best one
+""",
+        "explain_pql": """Task: Explain the PQL concept or function clearly.
+1. Give the official syntax
+2. Explain each argument precisely
+3. Show a working example in a code block
+4. Self-verify the example is correct before presenting it
+5. Describe a real business scenario where this applies
+""",
+        "business_process": """Task: Help the user solve their business process challenge.
+1. Identify the process type (O2C, P2P, AP, Manufacturing, etc.)
+2. Map the business question to the right PQL approach
+3. Write the PQL query in a code block
+4. Self-verify the query is syntactically correct
+5. Explain which tables/columns are typically relevant in Celonis
+""",
+        "general": """Task: Answer the Celonis/process mining question.
+1. Be direct and practical
+2. Include PQL examples if relevant (in code blocks)
+3. Connect to real business use cases
 """
+    }
 
-    elif intent == "explain_pql":
-        instruction = """Task: Explain the concept/function clearly.
-- Give a clear definition
-- Show the syntax with a practical example
-- Explain when and why to use it
-- Show a real business scenario where it applies
-"""
-
-    elif intent == "business_process":
-        instruction = """Task: Help the user with their business process question.
-- Identify the process type (O2C, P2P, Manufacturing etc.)
-- Map their business question to the right PQL approach
-- Write the PQL query if needed
-- Explain which Celonis tables/columns are typically relevant
-"""
-
-    else:  # general
-        instruction = """Task: Answer the question using your Celonis expertise.
-- Be direct and practical
-- Include PQL examples if relevant
-- Connect to real business use cases
-"""
-
+    instruction = instructions.get(intent, instructions["general"])
     return base + ref_block + instruction
 
 # =====================================
@@ -513,25 +567,24 @@ You are NOT limited to only this material — use your expert knowledge too.)
 with st.sidebar:
     st.markdown("## 🧠 Celonis PQL Copilot")
     st.markdown("---")
-
     st.markdown("**What I can help with:**")
     st.markdown("- ✍️ Write PQL queries")
     st.markdown("- 📖 Explain PQL functions")
     st.markdown("- 🏭 Business process analysis")
     st.markdown("- 🔍 Process mining concepts")
+    st.markdown("- ⚙️ Celonis platform questions")
     st.markdown("---")
-
-    st.markdown("**Knowledge Sources:**")
+    st.markdown("**Knowledge Base:**")
     st.markdown(f"- 📚 Doc chunks: `{len(docs_metadata)}`")
     st.markdown(f"- 💡 PQL examples: `{len(qa_metadata)}`")
     st.markdown(f"- 🧠 Learned Q&As: `{len(learned_examples)}`")
     st.markdown("---")
-
     st.markdown("**Try asking:**")
     st.caption("Write PQL to calculate throughput time in O2C")
-    st.caption("Explain PU_AVG with a real example")
+    st.caption("Explain PU_FIRST with a real example")
     st.caption("How do I find rework cases in manufacturing?")
     st.caption("What is DATEDIFF and when should I use it?")
+    st.caption("How do I connect SAP to Celonis?")
     st.markdown("---")
 
     if st.session_state.last_rewritten:
@@ -576,17 +629,29 @@ if prompt := st.chat_input("Ask anything about Celonis, PQL, or your business pr
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Classify intent
-    intent = classify_intent(prompt)
+    # Step 1: Classify intent and whether PQL context is needed
+    intent, is_pql_related = classify_intent(prompt)
 
-    # Always retrieve reference material to enhance the answer
-    reference = retrieve_reference(prompt)
+    # Step 2: Choose system prompt based on scope
+    # FIX 1: Platform questions get clean prompt, no PQL docs injected
+    system_prompt = PLATFORM_SYSTEM_PROMPT if intent == "platform_help" else PQL_SYSTEM_PROMPT
 
-    # Build the final prompt based on intent
-    final_prompt = build_prompt(prompt, intent, reference)
+    # Step 3: Only retrieve knowledge base context for PQL-related questions
+    reference = ""
+    if is_pql_related:
+        reference = retrieve_reference(prompt)
+    else:
+        # No retrieval for platform/admin — just answer directly and cleanly
+        st.session_state.last_rewritten = "[Platform question — no PQL context needed]"
 
-    # Build API message history
-    api_messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    # Step 4: Build the final user prompt
+    if intent == "platform_help":
+        final_prompt = f"Question:\n{prompt}"
+    else:
+        final_prompt = build_prompt(prompt, intent, reference)
+
+    # Step 5: Build API message history
+    api_messages = [{"role": "system", "content": system_prompt}]
     for m in st.session_state.messages[:-1]:
         api_messages.append({"role": m["role"], "content": m["content"]})
     api_messages.append({"role": "user", "content": final_prompt})
@@ -611,6 +676,5 @@ if prompt := st.chat_input("Ask anything about Celonis, PQL, or your business pr
 
     st.session_state.messages.append({"role": "assistant", "content": answer})
 
-    # Store good answers for future enhancement
     if answer and not answer.startswith("⚠️"):
         store_learning(prompt, answer)
