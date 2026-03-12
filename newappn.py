@@ -1,6 +1,6 @@
 import streamlit as st
 from groq import Groq
-from sentence_transformers import SentenceTransformer
+from sentence_transformers import SentenceTransformer, CrossEncoder
 import faiss
 import numpy as np
 import pickle
@@ -29,8 +29,6 @@ def set_background(image_file):
 
         page_bg = f"""
         <style>
-
-        /* Full App Background */
         .stApp {{
             background:
                 linear-gradient(rgba(0,0,0,0.85), rgba(0,0,0,0.85)),
@@ -40,43 +38,23 @@ def set_background(image_file):
             background-attachment: fixed;
         }}
 
-        .main {{
-            background-color: transparent !important;
-        }}
-
-        section.main > div {{
-            background-color: transparent !important;
-        }}
-
-        .block-container {{
-            padding-top: 2rem;
-            padding-bottom: 0rem;
-        }}
-
         .stChatMessage {{
-            background-color: rgba(20, 20, 30, 0.85);
+            background-color: rgba(20,20,30,0.85);
             border-radius: 12px;
             padding: 12px;
         }}
 
-        div[data-testid="stChatInput"] {{
-            background-color: rgba(20, 20, 30, 0.95);
-            border-radius: 12px;
-            padding: 8px;
-        }}
-
         section[data-testid="stSidebar"] {{
-            background-color: rgba(15, 15, 25, 0.95);
+            background-color: rgba(15,15,25,0.95);
         }}
 
-        h1, h2, h3, p, div, span {{
-            color: white !important;
+        h1,h2,h3,p,div,span {{
+            color:white !important;
         }}
-
         </style>
         """
         st.markdown(page_bg, unsafe_allow_html=True)
-    except FileNotFoundError:
+    except:
         pass
 
 set_background("background.png")
@@ -87,7 +65,14 @@ set_background("background.png")
 
 MODEL_NAME = "llama-3.1-8b-instant"
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
-EMBED_MODEL = SentenceTransformer("all-MiniLM-L6-v2")
+
+@st.cache_resource
+def load_models():
+    embed = SentenceTransformer("all-MiniLM-L6-v2")
+    reranker = CrossEncoder("BAAI/bge-reranker-base")
+    return embed, reranker
+
+EMBED_MODEL, RERANK_MODEL = load_models()
 
 # =====================================
 # SYSTEM PROMPT
@@ -96,49 +81,43 @@ EMBED_MODEL = SentenceTransformer("all-MiniLM-L6-v2")
 SYSTEM_PROMPT = """
 You are a Senior Celonis Process Mining Consultant AI.
 
-STRICT RULES:
-
-1. For general Process Mining questions:
-   - Provide structured explanation.
-   - Use simple real-world examples.
-
-2. For Celonis / PQL questions:
-   - STRICTLY use provided documentation context AND example queries.
-   - Preserve official syntax EXACTLY.
-   - Do NOT convert PQL into SQL.
-   - Do NOT simplify syntax.
-   - Do NOT invent examples outside of provided context.
-   - If not found in documentation, say:
-     "Not found in official Celonis documentation."
-
-3. Only generate new PQL queries if explicitly requested.
-4. Never use SQL keywords like SELECT, FROM, WHERE, JOIN.
-5. When example PQL queries are provided in context, reference them to guide your answer.
-6. Priority: Technical Accuracy > Simplicity.
+Rules:
+- Use provided documentation context strictly
+- Do NOT invent syntax
+- Do NOT convert PQL into SQL
+- Preserve official PQL syntax
+- If answer not in docs say:
+  "Not found in official Celonis documentation."
 """
 
 # =====================================
-# LOAD BOTH VECTOR STORES + BM25
+# LOAD VECTOR STORES
 # =====================================
 
 @st.cache_resource
 def load_all_stores():
-    # --- Official Celonis Docs ---
+
     docs_index = faiss.read_index("pql_faiss.index")
-    with open("pql_metadata.pkl", "rb") as f:
-        docs_metadata = pickle.load(f)      # list of dicts: {url, title, text}
 
-    # --- PQL Q&A Examples ---
+    with open("pql_metadata.pkl","rb") as f:
+        docs_metadata = pickle.load(f)
+
     qa_index = faiss.read_index("pql_knowledge.index")
-    with open("pql_knowledge.pkl", "rb") as f:
-        qa_metadata = pickle.load(f)        # list of strings
 
-    # --- BM25 on Docs ---
-    docs_corpus = [item["text"].lower().split() for item in docs_metadata]
+    with open("pql_knowledge.pkl","rb") as f:
+        qa_metadata = pickle.load(f)
+
+    docs_corpus = [
+        re.findall(r"\w+", item["text"].lower())
+        for item in docs_metadata
+    ]
+
+    qa_corpus = [
+        re.findall(r"\w+", item.lower())
+        for item in qa_metadata
+    ]
+
     docs_bm25 = BM25Okapi(docs_corpus)
-
-    # --- BM25 on Q&A ---
-    qa_corpus = [entry.lower().split() for entry in qa_metadata]
     qa_bm25 = BM25Okapi(qa_corpus)
 
     return docs_index, docs_metadata, docs_bm25, qa_index, qa_metadata, qa_bm25
@@ -150,273 +129,223 @@ docs_index, docs_metadata, docs_bm25, qa_index, qa_metadata, qa_bm25 = load_all_
 # =====================================
 
 if "messages" not in st.session_state:
-    st.session_state.messages = []
-
-if "last_rewritten" not in st.session_state:
-    st.session_state.last_rewritten = ""
+    st.session_state.messages=[]
 
 # =====================================
 # QUERY DETECTION
 # =====================================
 
 def is_celonis_query(prompt):
+
     keywords = [
-        "celonis", "pql", "pu_", "datediff", "remap",
-        "process query language", "pull-up", "running_sum",
-        "throughput", "event log", "case table", "activity table",
-        "conformance", "variant", "filter", "process mining",
-        "count_table", "avg", "median", "moving_avg", "process",
-        "avg_process", "source", "target", "rework", "loop",
-        "calc", "calculate", "query", "function", "column",
-        "aggregation", "metric", "kpi", "timestamp", "duration",
-        "case", "activity", "edge", "node", "frequency"
+        "celonis","pql","pu_","datediff",
+        "process mining","case","activity",
+        "throughput","event log"
     ]
-    return any(word in prompt.lower() for word in keywords)
+
+    return any(k in prompt.lower() for k in keywords)
 
 # =====================================
-# STEP 1 — QUERY REWRITING WITH LLM
+# QUERY REWRITE
 # =====================================
 
 def rewrite_query(prompt):
-    """Rewrites user question into precise PQL/Celonis terminology before searching."""
-    try:
-        response = client.chat.completions.create(
-            model=MODEL_NAME,
-            messages=[
-                {
-                    "role": "user",
-                    "content": f"""You are a Celonis PQL expert assistant.
-Rewrite the user's question into precise PQL and process mining terminology
-so it can be used to search a Celonis documentation database.
 
-Rules:
-- Use official PQL function names where applicable (e.g., PU_AVG, DATEDIFF, COUNT_TABLE, RUNNING_SUM)
-- Use Celonis-specific terms (e.g., case table, activity table, event log, pull-up functions)
-- Return ONLY the rewritten search query — no explanation, no extra text
-- Keep it concise (1-2 sentences max)
+    response = client.chat.completions.create(
+        model=MODEL_NAME,
+        messages=[{
+            "role":"user",
+            "content":f"""
+Rewrite the question for Celonis documentation search.
 
-User Question: {prompt}
+Use official PQL terminology.
 
-Rewritten Search Query:"""
-                }
-            ],
-            max_tokens=100,
-            temperature=0
-        )
-        return response.choices[0].message.content.strip()
-    except Exception:
-        return prompt  # Fallback to original if rewriting fails
+Question: {prompt}
+
+Return only rewritten query.
+"""
+        }],
+        temperature=0
+    )
+
+    return response.choices[0].message.content.strip()
 
 # =====================================
-# STEP 2 — EXACT FUNCTION ROUTING
+# MULTI QUERY GENERATION
 # =====================================
 
-def exact_function_match(query):
-    """Directly routes known PQL function names to their exact doc entry."""
-    query_upper = query.upper()
-    tokens = re.findall(r'\b[A-Z][A-Z0-9_]{2,}\b', query_upper)
+def generate_multi_queries(query):
 
-    for token in tokens:
-        for item in docs_metadata:
-            url = item.get("url", "").lower()
-            if token.lower().replace("_", "-") in url or token.lower() in url:
-                return item["text"]
-    return None
+    response = client.chat.completions.create(
+        model=MODEL_NAME,
+        messages=[{
+            "role":"user",
+            "content":f"""
+Generate 3 alternative search queries for Celonis documentation.
 
-# =====================================
-# STEP 3 — HYBRID SEARCH (SEMANTIC + BM25)
-# =====================================
+Query:
+{query}
 
-def hybrid_search(query, top_k=3):
-    """
-    Runs semantic (FAISS cosine) + keyword (BM25) search on both stores.
-    Merges results with weighted scoring: 60% semantic + 40% BM25.
-    """
-    query_embedding = EMBED_MODEL.encode([query])
-    query_np = np.array(query_embedding)
-    query_tokens = query.lower().split()
+Return each query on new line.
+"""
+        }],
+        temperature=0
+    )
 
-    # ---- DOCS: Semantic ----
-    D_docs, I_docs = docs_index.search(query_np, top_k * 2)
-    semantic_doc_scores = {
-        int(idx): 1 / (1 + float(dist))
-        for idx, dist in zip(I_docs[0], D_docs[0])
-        if idx < len(docs_metadata)
-    }
+    queries=response.choices[0].message.content.split("\n")
 
-    # ---- DOCS: BM25 ----
-    bm25_doc_raw = docs_bm25.get_scores(query_tokens)
-    bm25_doc_top_idx = np.argsort(bm25_doc_raw)[::-1][:top_k * 2]
-    max_bm25_doc = bm25_doc_raw[bm25_doc_top_idx[0]] if bm25_doc_raw[bm25_doc_top_idx[0]] > 0 else 1
-    bm25_doc_scores = {
-        int(i): bm25_doc_raw[i] / max_bm25_doc
-        for i in bm25_doc_top_idx
-        if bm25_doc_raw[i] > 0
-    }
-
-    # ---- DOCS: Merge ----
-    all_doc_idx = set(semantic_doc_scores) | set(bm25_doc_scores)
-    merged_doc = {
-        i: (semantic_doc_scores.get(i, 0) * 0.6) + (bm25_doc_scores.get(i, 0) * 0.4)
-        for i in all_doc_idx
-    }
-    top_docs = sorted(merged_doc, key=merged_doc.get, reverse=True)[:top_k]
-    doc_results = "\n\n".join(docs_metadata[i]["text"] for i in top_docs)
-
-    # ---- QA: Semantic ----
-    D_qa, I_qa = qa_index.search(query_np, top_k * 2)
-    semantic_qa_scores = {
-        int(idx): 1 / (1 + float(dist))
-        for idx, dist in zip(I_qa[0], D_qa[0])
-        if idx < len(qa_metadata)
-    }
-
-    # ---- QA: BM25 ----
-    bm25_qa_raw = qa_bm25.get_scores(query_tokens)
-    bm25_qa_top_idx = np.argsort(bm25_qa_raw)[::-1][:top_k * 2]
-    max_bm25_qa = bm25_qa_raw[bm25_qa_top_idx[0]] if bm25_qa_raw[bm25_qa_top_idx[0]] > 0 else 1
-    bm25_qa_scores = {
-        int(i): bm25_qa_raw[i] / max_bm25_qa
-        for i in bm25_qa_top_idx
-        if bm25_qa_raw[i] > 0
-    }
-
-    # ---- QA: Merge ----
-    all_qa_idx = set(semantic_qa_scores) | set(bm25_qa_scores)
-    merged_qa = {
-        i: (semantic_qa_scores.get(i, 0) * 0.6) + (bm25_qa_scores.get(i, 0) * 0.4)
-        for i in all_qa_idx
-    }
-    top_qa = sorted(merged_qa, key=merged_qa.get, reverse=True)[:top_k]
-    qa_results = "\n\n".join(qa_metadata[i] for i in top_qa)
-
-    return doc_results, qa_results
+    return [q.strip() for q in queries if q.strip()]
 
 # =====================================
-# FULL CONTEXT PIPELINE
+# HYBRID SEARCH
+# =====================================
+
+def hybrid_search(query):
+
+    embedding=EMBED_MODEL.encode([query])
+    embedding=np.array(embedding).astype("float32")
+
+    tokens=re.findall(r"\w+",query.lower())
+
+    D,I=docs_index.search(embedding,5)
+
+    results=[]
+
+    for idx in I[0]:
+        if idx<len(docs_metadata):
+            results.append(docs_metadata[idx]["text"])
+
+    bm25_scores=docs_bm25.get_scores(tokens)
+
+    top=np.argsort(bm25_scores)[::-1][:5]
+
+    for i in top:
+        results.append(docs_metadata[i]["text"])
+
+    return results
+
+# =====================================
+# RERANKING
+# =====================================
+
+def rerank(query, docs):
+
+    pairs=[[query,doc] for doc in docs]
+
+    scores=RERANK_MODEL.predict(pairs)
+
+    ranked=[doc for _,doc in sorted(zip(scores,docs),reverse=True)]
+
+    return ranked[:3]
+
+# =====================================
+# CONTEXT RETRIEVAL
 # =====================================
 
 def retrieve_context(prompt):
-    # Step 1: Rewrite query into PQL terminology for better recall
-    rewritten = rewrite_query(prompt)
-    st.session_state.last_rewritten = rewritten
 
-    # Step 2: Exact function match on original prompt
-    exact_match = exact_function_match(prompt)
+    query=prompt
 
-    # Step 3: Hybrid search using rewritten query
-    doc_context, qa_context = hybrid_search(rewritten, top_k=3)
+    if is_celonis_query(prompt):
+        query=rewrite_query(prompt)
 
-    # Step 4: Assemble full context block
-    sections = []
+    queries=[query]+generate_multi_queries(query)
 
-    if exact_match:
-        sections.append("### 📖 Official Documentation (Exact Function Match):\n" + exact_match)
-    elif doc_context:
-        sections.append("### 📖 Official Documentation:\n" + doc_context)
+    docs=[]
 
-    if qa_context:
-        sections.append("### 💡 Relevant PQL Query Examples:\n" + qa_context)
+    for q in queries:
+        docs+=hybrid_search(q)
 
-    return "\n\n".join(sections), rewritten
+    docs=list(set(docs))
+
+    top_docs=rerank(query,docs)
+
+    context="\n\n".join(top_docs)
+
+    return context[:8000]
 
 # =====================================
 # SIDEBAR
 # =====================================
 
 with st.sidebar:
-    st.markdown("## 🧠 Celonis Copilot")
-    st.markdown("---")
-    st.markdown("**Model:** `llama-3.1-8b-instant`")
-    st.markdown("**Embed:** `all-MiniLM-L6-v2`")
-    st.markdown("**Search:** `Hybrid (Semantic + BM25)`")
-    st.markdown("**Query Rewriting:** `✅ Enabled`")
-    st.markdown("---")
-    st.markdown("**Knowledge Base:**")
-    st.markdown(f"- 📚 Docs chunks: `{len(docs_metadata)}`")
-    st.markdown(f"- 💡 PQL examples: `{len(qa_metadata)}`")
-    st.markdown("---")
 
-    # Show rewritten query for transparency / debugging
-    if st.session_state.last_rewritten:
-        st.markdown("**🔍 Last Rewritten Query:**")
-        st.info(st.session_state.last_rewritten)
-        st.markdown("---")
+    st.markdown("## Celonis Copilot")
 
-    if st.button("🗑️ Clear Chat History"):
-        st.session_state.messages = []
-        st.session_state.last_rewritten = ""
+    st.markdown("Hybrid RAG")
+
+    st.markdown("Multi Query Retrieval")
+
+    st.markdown("Cross Encoder Reranking")
+
+    if st.button("Clear Chat"):
+        st.session_state.messages=[]
         st.rerun()
 
-    st.markdown("---")
-    st.caption("Powered by Divyansh")
-
 # =====================================
-# UI HEADER
+# UI
 # =====================================
 
-st.title("🧠 Process Mining Copilot (Celonis)")
-st.markdown("Ask anything about **PQL**, **Process Mining**, or **Celonis** platform.")
+st.title("Celonis Process Mining Copilot")
 
 # =====================================
-# DISPLAY CHAT HISTORY
+# CHAT HISTORY
 # =====================================
 
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+for m in st.session_state.messages:
+
+    with st.chat_message(m["role"]):
+        st.markdown(m["content"])
 
 # =====================================
-# CHAT INPUT
+# USER INPUT
 # =====================================
 
-if prompt := st.chat_input("Ask your question..."):
+if prompt:=st.chat_input("Ask about Celonis or PQL"):
 
-    st.session_state.messages.append({"role": "user", "content": prompt})
+    st.session_state.messages.append({"role":"user","content":prompt})
 
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Build final prompt
-    rewritten_query = ""
+    context=""
+
     if is_celonis_query(prompt):
-        context, rewritten_query = retrieve_context(prompt)
-        final_prompt = f"""STRICT MODE ENABLED.
+        context=retrieve_context(prompt)
 
-Original Question: {prompt}
-Rewritten Search Query Used: {rewritten_query}
+        final_prompt=f"""
+Question:
+{prompt}
 
-Documentation & Example Context:
----------------------------------
+Documentation Context:
 {context}
----------------------------------
 
-Please answer the original question using the context above.
+Answer using only the context.
 """
+
     else:
-        final_prompt = prompt
+        final_prompt=prompt
 
-    # Build clean API message history (original messages for history, injected prompt for current turn)
-    api_messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-    for msg in st.session_state.messages[:-1]:
-        api_messages.append({"role": msg["role"], "content": msg["content"]})
-    api_messages.append({"role": "user", "content": final_prompt})
+    api_messages=[{"role":"system","content":SYSTEM_PROMPT}]
 
-    # Generate response
-    reply = ""
+    for m in st.session_state.messages[:-1]:
+        api_messages.append(m)
+
+    api_messages.append({"role":"user","content":final_prompt})
+
     with st.chat_message("assistant"):
-        with st.spinner("Analyzing..."):
-            try:
-                response = client.chat.completions.create(
-                    model=MODEL_NAME,
-                    messages=api_messages,
-                    temperature=0.1,
-                    max_tokens=1500
-                )
-                reply = response.choices[0].message.content
-                st.markdown(reply)
-            except Exception as e:
-                reply = f"⚠️ Error contacting Groq API: {str(e)}"
-                st.error(reply)
 
-    st.session_state.messages.append({"role": "assistant", "content": reply})
+        with st.spinner("Thinking..."):
+
+            response=client.chat.completions.create(
+                model=MODEL_NAME,
+                messages=api_messages,
+                temperature=0.1,
+                max_tokens=1500
+            )
+
+            reply=response.choices[0].message.content
+
+            st.markdown(reply)
+
+    st.session_state.messages.append({"role":"assistant","content":reply})
