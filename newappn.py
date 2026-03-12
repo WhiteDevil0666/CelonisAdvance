@@ -782,30 +782,23 @@ def explain_concept(prompt, context):
 
 
 # ==========================================================
-# VALIDATION AGENT
+# VALIDATION AGENT — FIXED
+# Only flags responses that contain a SELECT...FROM SQL pattern
+# inside a code block. Plain explanations are never flagged.
 # ==========================================================
 
 def validate_pql(answer):
 
-    import re
-
-    # find code blocks
     code_blocks = re.findall(r"```(.*?)```", answer, re.DOTALL)
 
-    # if there are no code blocks we assume explanation only
     if not code_blocks:
         return True
 
-    sql_keywords = ["SELECT", "FROM", "WHERE", "JOIN", "GROUP BY"]
-
     for block in code_blocks:
-
         upper = block.upper()
-
-        for kw in sql_keywords:
-
-            if kw in upper:
-                return False
+        # Only flag if it looks like a real SQL statement (SELECT ... FROM pattern)
+        if re.search(r"\bSELECT\b.+\bFROM\b", upper, re.DOTALL):
+            return False
 
     return True
 
@@ -848,7 +841,8 @@ def planner(prompt):
 
 
 # ==========================================================
-# EXECUTION ENGINE
+# EXECUTION ENGINE — FIXED
+# Validation now only runs for pql_generation intent
 # ==========================================================
 
 def run_agent(prompt):
@@ -880,15 +874,15 @@ def run_agent(prompt):
 
         answer = generate_pql(prompt, context)
 
+        # ✅ FIX: Only validate PQL for pql_generation intent
+        if intent == "pql_generation" and not validate_pql(answer):
+            answer = "⚠️ Generated SQL instead of valid PQL. Please try rephrasing your question."
+
     else:
 
         context = compress_context(context)
 
         answer = explain_concept(prompt, context)
-
-    if not validate_pql(answer):
-
-        answer = "⚠️ Generated SQL instead of valid PQL."
 
     return answer
 
@@ -952,17 +946,4 @@ if prompt:
 
             except Exception as e:
 
-                answer = f"⚠️ Error: {str(e)}"
-
-            st.markdown(answer)
-
-    st.session_state.messages.append({
-        "role":"assistant",
-        "content":answer
-    })
-
-    store_learning(prompt, answer)
-
-
-
-
+                answer = f"⚠
