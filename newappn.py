@@ -124,23 +124,32 @@ def safe_pickle_save(path,obj):
 # VECTOR STORE LOADING
 # ==========================================================
 
-def load_vector_store(index_path,meta_path):
+def load_vector_store(index_path, meta_path):
 
-    if os.path.exists(index_path):
+    try:
 
-        index = faiss.read_index(index_path)
+        if os.path.exists(index_path):
 
-        meta = safe_pickle_load(meta_path)
+            index = faiss.read_index(index_path)
 
-        if meta is None:
+            meta = safe_pickle_load(meta_path)
+
+            if meta is None:
+                meta = []
+
+        else:
+
+            index = faiss.IndexFlatL2(384)
             meta = []
 
-    else:
+    except Exception as e:
+
+        log_event(f"FAISS load failed: {e}")
 
         index = faiss.IndexFlatL2(384)
         meta = []
 
-    return index,meta
+    return index, meta
 
 # ==========================================================
 # LOAD STATIC KNOWLEDGE
@@ -949,5 +958,6 @@ if prompt:
     })
 
     store_learning(prompt, answer)
+
 
 
