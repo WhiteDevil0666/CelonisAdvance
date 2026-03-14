@@ -838,6 +838,75 @@ pre, code {
     border:1px solid #374151 !important;
     color:#f1f5f9 !important;
 }
+
+/* ───────── PQL Syntax Highlight ───────── */
+
+pre code {
+    color:#e6edf3 !important;
+    font-family: "JetBrains Mono", monospace !important;
+    font-size:13px !important;
+    line-height:1.5 !important;
+}
+
+/* highlight functions */
+code .pu, code .fn {
+    color:#22c55e !important;
+    font-weight:600;
+}
+
+/* highlight table names */
+code .tbl {
+    color:#60a5fa !important;
+}
+
+/* highlight strings */
+code .str {
+    color:#facc15 !important;
+}
+
+/* highlight numbers */
+code .num {
+    color:#fb7185 !important;
+}
+
+/* ───────── Function Badges ───────── */
+
+.func-badge {
+    display:inline-block;
+    padding:2px 8px;
+    margin:2px;
+    border-radius:6px;
+    background:#1e293b;
+    border:1px solid #334155;
+    color:#38bdf8;
+    font-size:11px;
+    font-weight:600;
+    letter-spacing:0.3px;
+}
+
+/* ───────── Better Code Blocks ───────── */
+
+pre {
+    background:#020617 !important;
+    border:1px solid #1e293b !important;
+    border-radius:10px !important;
+    padding:14px !important;
+    overflow-x:auto !important;
+}
+
+/* ───────── Smooth Chat Bubbles ───────── */
+
+[data-testid="stChatMessage"] {
+    box-shadow:0 4px 14px rgba(0,0,0,0.35);
+}
+
+/* ───────── Sidebar Hover Effects ───────── */
+
+.stButton > button:hover {
+    background:#1e293b !important;
+    border-color:#6366f1 !important;
+    transform:scale(1.02);
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -1188,6 +1257,7 @@ if prompt := st.chat_input('Describe your query, ask about a function, or paste 
     with st.chat_message('user', avatar='🧑'):
         st.markdown(prompt)
     stream_groq()
+
 
 
 
