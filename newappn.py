@@ -359,6 +359,75 @@ CATEGORY_ICONS = {
 }
 
 # ──────────────────────────────────────────────────────────────
+# FUNCTION-AWARE RETRIEVAL
+# Detect which PQL functions are referenced in the prompt
+# ──────────────────────────────────────────────────────────────
+
+import re
+
+FUNCTION_NAMES = list(COMPACT_REFS.keys())
+
+def detect_functions(text):
+    found = []
+    for fn in FUNCTION_NAMES:
+        if re.search(rf"\b{fn}\b", text, re.IGNORECASE):
+            found.append(fn)
+    return found
+
+
+def build_function_context(user_query):
+    """
+    Return only relevant function documentation
+    instead of sending the entire 175-function KB.
+    """
+    funcs = detect_functions(user_query)
+
+    if not funcs:
+        return ""
+
+    docs = []
+    for f in funcs[:12]:  # limit context
+        docs.append(f"### {f}\n{COMPACT_REFS[f]}")
+
+    return "\n".join(docs)
+
+
+# ──────────────────────────────────────────────────────────────
+# FUNCTION-AWARE RETRIEVAL
+# Detect which PQL functions are referenced in the prompt
+# ──────────────────────────────────────────────────────────────
+
+import re
+
+FUNCTION_NAMES = list(COMPACT_REFS.keys())
+
+def detect_functions(text):
+    found = []
+    for fn in FUNCTION_NAMES:
+        if re.search(rf"\b{fn}\b", text, re.IGNORECASE):
+            found.append(fn)
+    return found
+
+
+def build_function_context(user_query):
+    """
+    Return only relevant function documentation
+    instead of sending the entire 175-function KB.
+    """
+    funcs = detect_functions(user_query)
+
+    if not funcs:
+        return ""
+
+    docs = []
+    for f in funcs[:12]:  # limit context
+        docs.append(f"### {f}\n{COMPACT_REFS[f]}")
+
+    return "\n".join(docs)
+
+
+
+# ──────────────────────────────────────────────────────────────
 #  SECTION 2 · GROQ MODELS
 # ──────────────────────────────────────────────────────────────
 
@@ -859,36 +928,86 @@ I write, explain, and optimize Celonis PQL queries at any complexity level.
 
 # ── Helper: call Groq with streaming ──────────────────────────
 def stream_groq(prompt_override=None):
-    msgs = st.session_state.messages
-    system = build_system_prompt(st.session_state.complexity, st.session_state.show_reasoning)
 
+    msgs = st.session_state.messages
+
+    # Get latest user query
+    user_query = prompt_override if prompt_override else msgs[-1]["content"]
+
+    # Function-aware retrieval
+    func_context = build_function_context(user_query)
+
+    # Build system prompt
+    system = build_system_prompt(
+        st.session_state.complexity,
+        st.session_state.show_reasoning
+    )
+
+    # Inject retrieved function docs
+    if func_context:
+        system += "\n\n## Relevant PQL Functions\n" + func_context
+
+    # If sidebar example triggered
     if prompt_override:
         msgs = msgs + [{'role': 'user', 'content': prompt_override}]
 
     with st.chat_message('assistant', avatar='⚡'):
+
         placeholder = st.empty()
-        full = ''
+        full = ""
+
         try:
             stream = client.chat.completions.create(
                 model=st.session_state.model_id,
                 messages=[
-                    {'role': 'system', 'content': system},
-                    *[{'role': m['role'], 'content': m['content']} for m in msgs],
+                    {"role": "system", "content": system},
+                    *[{"role": m["role"], "content": m["content"]} for m in msgs],
                 ],
                 max_tokens=2048,
                 temperature=0.15,
                 stream=True,
             )
-            for chunk in stream:
-                delta = chunk.choices[0].delta.content or ''
-                full += delta
-                placeholder.markdown(full + '▌')
-            placeholder.markdown(full)
-            st.session_state.messages.append({'role': 'assistant', 'content': full})
-            st.session_state.total_queries += 1
-        except Exception as e:
-            placeholder.error(f'Groq API error: {e}')
 
+            # Stream tokens
+            for chunk in stream:
+                delta = chunk.choices[0].delta.content or ""
+                full += delta
+                placeholder.markdown(full + "▌")
+
+            placeholder.markdown(full)
+
+            # Store assistant message
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": full
+            })
+
+            st.session_state.total_queries += 1
+
+            # ─────────────────────────────────────────
+            # PQL VALIDATION + SELF CORRECTION
+            # ─────────────────────────────────────────
+
+            match = re.search(r"```pql(.*?)```", full, re.S)
+
+            if match:
+
+                pql_query = match.group(1).strip()
+
+                issues = validate_pql(pql_query)
+
+                if issues:
+
+                    st.warning("⚠ Validator detected possible PQL issues")
+
+                    corrected = correct_query_if_needed(pql_query, issues)
+
+                    st.markdown("### 🔧 Auto-Corrected Query")
+
+                    st.code(corrected, language="sql")
+
+        except Exception as e:
+            placeholder.error(f"Groq API error: {e}")
 # Handle sidebar button → pending prompt
 if '_pending' in st.session_state:
     pending = st.session_state.pop('_pending')
@@ -904,3 +1023,4 @@ if prompt := st.chat_input('Describe your query, ask about a function, or paste 
     with st.chat_message('user', avatar='🧑'):
         st.markdown(prompt)
     stream_groq()
+
