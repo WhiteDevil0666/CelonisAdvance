@@ -212,6 +212,7 @@ COMPACT_REFS = {
     'SHORTENED': 'Shortens self-loops in VARIANT. Syntax: VARIANT( ..., SHORTENED(max) )',
     'BKPF': 'SAP BKPF table reference used in SAP P2P process examples.',
     'MANUAL_MINER': 'Defines manual transitions for TRANSIT_COLUMN.',
+    'COUNT': 'Counts non-NULL rows. Syntax: COUNT(table.column). Often wrapped with GLOBAL() when mixing table levels.',
 }
 
 PANEL_DATA = {
@@ -359,71 +360,67 @@ CATEGORY_ICONS = {
 }
 
 # ──────────────────────────────────────────────────────────────
-# FUNCTION-AWARE RETRIEVAL
-# Detect which PQL functions are referenced in the prompt
+# SMART FUNCTION RETRIEVAL
+# Faster detection for PU functions + normal functions
 # ──────────────────────────────────────────────────────────────
 
 import re
 
 FUNCTION_NAMES = list(COMPACT_REFS.keys())
 
-def detect_functions(text):
-    found = []
+# Pre-categorize PU functions (most commonly used)
+PU_FUNCTIONS = [fn for fn in FUNCTION_NAMES if fn.startswith("PU_")]
+
+# Common query patterns that imply PU usage
+PU_HINT_PATTERNS = [
+    r'per\s+case',
+    r'per\s+vendor',
+    r'per\s+order',
+    r'per\s+customer',
+    r'per\s+\w+',
+    r'group\s+by',
+    r'aggregate',
+    r'count\s+per',
+    r'sum\s+per',
+]
+
+
+def detect_functions(text: str):
+
+    text_lower = text.lower()
+    found = set()
+
+    # 1️⃣ Direct function mentions
     for fn in FUNCTION_NAMES:
-        if re.search(rf"\b{fn}\b", text, re.IGNORECASE):
-            found.append(fn)
-    return found
+        if fn.lower() in text_lower:
+            found.add(fn)
+
+    # 2️⃣ Detect PU usage patterns
+    if any(re.search(pattern, text_lower) for pattern in PU_HINT_PATTERNS):
+        found.update(PU_FUNCTIONS[:8])  # add common PU docs
+
+    return list(found)
 
 
-def build_function_context(user_query):
+def build_function_context(user_query: str):
     """
     Return only relevant function documentation
     instead of sending the entire 175-function KB.
     """
+
     funcs = detect_functions(user_query)
 
     if not funcs:
         return ""
 
     docs = []
-    for f in funcs[:12]:  # limit context
-        docs.append(f"### {f}\n{COMPACT_REFS[f]}")
 
-    return "\n".join(docs)
+    for fn in funcs[:12]:   # limit context size
+        if fn in COMPACT_REFS:
+            docs.append(f"### {fn}\n{COMPACT_REFS[fn]}")
 
+    return "\n\n".join(docs)
 
-# ──────────────────────────────────────────────────────────────
-# FUNCTION-AWARE RETRIEVAL
-# Detect which PQL functions are referenced in the prompt
-# ──────────────────────────────────────────────────────────────
-
-import re
-
-FUNCTION_NAMES = list(COMPACT_REFS.keys())
-
-def detect_functions(text):
-    found = []
-    for fn in FUNCTION_NAMES:
-        if re.search(rf"\b{fn}\b", text, re.IGNORECASE):
-            found.append(fn)
-    return found
-
-
-def build_function_context(user_query):
-    """
-    Return only relevant function documentation
-    instead of sending the entire 175-function KB.
-    """
-    funcs = detect_functions(user_query)
-
-    if not funcs:
-        return ""
-
-    docs = []
-    for f in funcs[:12]:  # limit context
-        docs.append(f"### {f}\n{COMPACT_REFS[f]}")
-
-    return "\n".join(docs)
 
 
 
@@ -609,14 +606,16 @@ Write ACCURATE, OPTIMIZED, PRODUCTION-READY PQL queries.
 - PU-functions aggregate FROM child table (many-side) TO parent table (one-side)
 - Standard tables: "CASES"."CASE_ID", "ACTIVITIES"."ACTIVITY", "ACTIVITIES"."TIMESTAMP"
 
-## Full PQL Function Reference (175 functions)
-{func_ref}
+    ## Full PQL Function Reference (175 functions)
+    {func_ref}
 """
 
     if complexity in ("Advanced", "Expert"):
         base += _ADVANCED_PATTERNS
+
     if complexity == "Expert":
         base += _EXPERT_FRAMEWORK
+
 
     if show_reasoning and complexity in ("Advanced", "Expert"):
         base += """
@@ -627,6 +626,7 @@ Write ACCURATE, OPTIMIZED, PRODUCTION-READY PQL queries.
 4. **Performance notes** — describe optimization choices
 5. **Edge cases** — flag NULL handling or filter propagation issues
 """
+
     elif complexity == "Intermediate":
         base += """
 ## Response Format
@@ -634,6 +634,7 @@ Write ACCURATE, OPTIMIZED, PRODUCTION-READY PQL queries.
 2. Explain each function used
 3. Mention important gotchas
 """
+
     else:
         base += """
 ## Response Format
@@ -641,17 +642,68 @@ Write ACCURATE, OPTIMIZED, PRODUCTION-READY PQL queries.
 2. Short plain-English explanation
 """
 
+
     instructions = {
-        "Basic":        "Simple queries. One or two functions maximum. Clear placeholder names.",
-        "Intermediate": "2-5 functions. Include filters and basic conditionals. Explain join directions.",
-        "Advanced":     "Nested functions, GLOBAL(), PU with filter args, multi-table operations. Always explain GLOBAL() decisions.",
-        "Expert":       "Fully production-ready. Handle NULLs explicitly, optimize aggressively, apply the chain-of-thought framework for every complex request. Never miss GLOBAL() where required.",
+
+        "Basic": """
+Simple queries.
+Use one or two functions maximum.
+Clear placeholder table names.
+""",
+
+        "Intermediate": """
+Queries may contain 2–5 functions.
+Use filters, CASE WHEN logic, and simple aggregations.
+Explain join directions when necessary.
+""",
+
+        "Advanced": """
+Use nested functions, GLOBAL(), and PU aggregations.
+Support multi-table logic and performance optimization.
+Always explain why GLOBAL() is required.
+""",
+
+        "Expert": """
+Write production-ready Celonis PQL.
+
+Capabilities expected:
+• Multi-KPI queries
+• Nested PU aggregations
+• Throughput calculations
+• Rework detection
+• Automation rate calculations
+• Prevent join multiplication using GLOBAL()
+
+Stress-test examples the assistant must solve:
+
+1. Generate a full KPI query calculating throughput time,
+   rework count, and automation rate per vendor while avoiding join multiplication.
+
+2. Write a single PQL query calculating:
+   - average throughput per case
+   - number of rework activities
+   - first activity timestamp
+   - last activity timestamp
+   - automation rate (system activities / total)
+
+Ensure PU functions are used correctly and queries remain performant.
+"""
     }
 
-    base += f"\n## Complexity: {complexity}\n{instructions[complexity]}\n"
-    base += '\nWhen table/column names are unknown use: "CASES"."CASE_ID", "ACTIVITIES"."ACTIVITY", "ACTIVITIES"."TIMESTAMP", "ORDERS"."AMOUNT", "VENDORS"."VENDOR_ID"\n'
-    return base
 
+    base += f"\n## Complexity: {complexity}\n{instructions[complexity]}\n"
+
+    base += """
+When table/column names are unknown use:
+
+"CASES"."CASE_ID"
+"ACTIVITIES"."ACTIVITY"
+"ACTIVITIES"."TIMESTAMP"
+"ORDERS"."AMOUNT"
+"VENDORS"."VENDOR_ID"
+"""
+
+    return base
 # ──────────────────────────────────────────────────────────────
 #  SECTION 4 · UI CONSTANTS
 # ──────────────────────────────────────────────────────────────
@@ -926,6 +978,86 @@ I write, explain, and optimize Celonis PQL queries at any complexity level.
 → Use the sidebar to change complexity or browse all 175 functions.
 """)
 
+
+
+
+# ─────────────────────────────────────────
+# PQL VALIDATOR
+# ─────────────────────────────────────────
+
+def validate_pql(query):
+
+    issues = []
+
+    # Missing quotes
+    if re.search(r'\b[A-Z]+\.[A-Z]+\b', query) and '"' not in query:
+        issues.append("Column names might be missing double quotes.")
+
+    # PU syntax check
+    if "PU_" in query and "," not in query:
+        issues.append("PU functions require syntax: PU_FUNC(target_table, source_column)")
+
+    # GLOBAL check
+    if "CALC_THROUGHPUT" in query and "GLOBAL(" not in query:
+        issues.append("Consider wrapping CALC_THROUGHPUT with GLOBAL() when mixing tables.")
+
+    # FILTER_TO_NULL warning
+    if "FILTER_TO_NULL" in query:
+        issues.append("FILTER_TO_NULL may break caching inside PU functions.")
+
+    return issues
+
+# ─────────────────────────────────────────
+# SELF CORRECTING AGENT
+# ─────────────────────────────────────────
+
+def correct_query_if_needed(query, issues):
+
+    """
+    Uses the LLM to repair invalid PQL queries detected by the validator.
+    """
+
+    repair_prompt = f"""
+You are a Celonis PQL expert.
+
+The following PQL query may contain mistakes.
+
+Issues detected:
+{issues}
+
+Fix the query while keeping the original logic.
+
+Return ONLY the corrected PQL query inside a ```pql block.
+
+Original Query:
+{query}
+"""
+
+    try:
+
+        response = client.chat.completions.create(
+            model=st.session_state.model_id,
+            messages=[
+                {"role": "system", "content": "You are a Celonis PQL expert."},
+                {"role": "user", "content": repair_prompt},
+            ],
+            temperature=0,
+            max_tokens=800
+        )
+
+        text = response.choices[0].message.content
+
+        match = re.search(r"```pql(.*?)```", text, re.S)
+
+        if match:
+            return match.group(1).strip()
+
+        return text
+
+    except Exception as e:
+        return f"Correction failed: {e}"
+
+
 # ── Helper: call Groq with streaming ──────────────────────────
 def stream_groq(prompt_override=None):
 
@@ -1023,4 +1155,5 @@ if prompt := st.chat_input('Describe your query, ask about a function, or paste 
     with st.chat_message('user', avatar='🧑'):
         st.markdown(prompt)
     stream_groq()
+
 
