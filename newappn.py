@@ -805,6 +805,39 @@ h1,h2,h3 { color:#f1f5f9 !important; }
     background:#0d1117; border:1px solid #1e2531;
     border-radius:10px; padding:10px 14px;
 }
+
+/* Improve visibility of assistant text */
+[data-testid="stChatMessageContent"] {
+    color:#e2e8f0 !important;
+}
+
+[data-testid="stChatMessageContent"] p {
+    color:#e2e8f0 !important;
+}
+
+[data-testid="stChatMessageContent"] li {
+    color:#e2e8f0 !important;
+}
+
+[data-testid="stChatMessageContent"] strong {
+    color:#f8fafc !important;
+}
+
+[data-testid="stChatMessageContent"] span {
+    color:#e2e8f0 !important;
+}
+
+/* Fix bullet visibility */
+[data-testid="stChatMessageContent"] ul {
+    color:#e2e8f0 !important;
+}
+
+/* Improve code block readability */
+pre, code {
+    background:#111827 !important;
+    border:1px solid #374151 !important;
+    color:#f1f5f9 !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -1155,5 +1188,6 @@ if prompt := st.chat_input('Describe your query, ask about a function, or paste 
     with st.chat_message('user', avatar='🧑'):
         st.markdown(prompt)
     stream_groq()
+
 
 
