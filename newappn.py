@@ -439,6 +439,37 @@ GROQ_MODELS = {
 #  SECTION 3 · SYSTEM PROMPT BUILDER
 # ──────────────────────────────────────────────────────────────
 
+_SQL_PROHIBITION = """
+## CRITICAL — PQL IS NOT SQL. NEVER WRITE SQL.
+
+These SQL keywords DO NOT EXIST in PQL. If you write any of them, the query is WRONG:
+  ✗ SELECT   ✗ FROM    ✗ JOIN    ✗ LEFT JOIN   ✗ GROUP BY
+  ✗ HAVING   ✗ WITH    ✗ AS (CTE)  ✗ OVER(...)  ✗ ORDER BY (as SQL clause)
+
+### WRONG — this is SQL, not PQL. NEVER write this:
+```sql
+SELECT "LFA1"."LIFNR",
+       AVG(DATEDIFF(dd, "EKKO"."BEDAT", "EKPO"."LGDAT")) AS LEAD_TIME
+FROM "EKKO"
+JOIN "EKPO" ON "EKKO"."EBELN" = "EKPO"."EBELN"
+GROUP BY "LFA1"."LIFNR"
+```
+
+### CORRECT — this is real PQL:
+```pql
+-- Average lead time per vendor (PU aggregates child → parent)
+PU_AVG(
+  "LFA1",
+  DATEDIFF(dd, "EKKO"."BEDAT", "EKPO"."LGDAT")
+)
+```
+
+PQL works by referencing columns directly and using PU-functions to
+aggregate across table relationships. There is NO SELECT, NO FROM, NO JOIN.
+Each expression is a single column-level formula evaluated per row of the
+result table.
+"""
+
 _ADVANCED_PATTERNS = """
 ## Advanced PQL Patterns — use as building blocks
 
@@ -554,6 +585,26 @@ WORKDAYS_BETWEEN(
   "ORDERS"."CLOSE_DATE"
 )
 ```
+
+### P16 · Supplier performance metrics (SAP tables)
+```pql
+-- Lead time per vendor
+PU_AVG(
+  "LFA1",
+  DATEDIFF(dd, "EKKO"."BEDAT", "EKPO"."LGDAT")
+)
+
+-- Delivery reliability rate per vendor
+PU_COUNT("LFA1", "EKPO"."EBELN",
+  DATEDIFF(dd, "EKPO"."BEDAT", "EKPO"."LGDAT") <= 0
+) /
+PU_COUNT("LFA1", "EKPO"."EBELN")
+
+-- On-time delivery count per vendor
+PU_COUNT("LFA1", "EKPO"."EBELN",
+  DATEDIFF(dd, "EKPO"."BEDAT", "EKPO"."LGDAT") <= 0
+)
+```
 """
 
 _EXPERT_FRAMEWORK = """
@@ -589,7 +640,9 @@ Build innermost aggregation first. Wrap with GLOBAL() at table boundaries. CASE 
 4. MEDIAN when AVG is sufficient → expensive sort
 5. Missing double-quotes on table/column names
 6. Single-quoting column names (only for string constants)
+7. Writing SQL (SELECT/FROM/JOIN/GROUP BY) instead of PQL → NEVER do this
 """
+
 
 def build_system_prompt(complexity: str, show_reasoning: bool) -> str:
     func_ref = "\n".join(f"### {fn}\n{doc}" for fn, doc in COMPACT_REFS.items())
@@ -606,8 +659,10 @@ Write ACCURATE, OPTIMIZED, PRODUCTION-READY PQL queries.
 - PU-functions aggregate FROM child table (many-side) TO parent table (one-side)
 - Standard tables: "CASES"."CASE_ID", "ACTIVITIES"."ACTIVITY", "ACTIVITIES"."TIMESTAMP"
 
-    ## Full PQL Function Reference (175 functions)
-    {func_ref}
+{_SQL_PROHIBITION}
+
+## Full PQL Function Reference (175 functions)
+{func_ref}
 """
 
     if complexity in ("Advanced", "Expert"):
@@ -615,7 +670,6 @@ Write ACCURATE, OPTIMIZED, PRODUCTION-READY PQL queries.
 
     if complexity == "Expert":
         base += _EXPERT_FRAMEWORK
-
 
     if show_reasoning and complexity in ("Advanced", "Expert"):
         base += """
@@ -642,37 +696,32 @@ Write ACCURATE, OPTIMIZED, PRODUCTION-READY PQL queries.
 2. Short plain-English explanation
 """
 
-
     instructions = {
-
         "Basic": """
 Simple queries.
 Use one or two functions maximum.
 Clear placeholder table names.
 """,
-
         "Intermediate": """
 Queries may contain 2–5 functions.
 Use filters, CASE WHEN logic, and simple aggregations.
 Explain join directions when necessary.
 """,
-
         "Advanced": """
 Use nested functions, GLOBAL(), and PU aggregations.
 Support multi-table logic and performance optimization.
 Always explain why GLOBAL() is required.
 """,
-
         "Expert": """
 Write production-ready Celonis PQL.
 
 Capabilities expected:
-• Multi-KPI queries
-• Nested PU aggregations
-• Throughput calculations
-• Rework detection
-• Automation rate calculations
-• Prevent join multiplication using GLOBAL()
+- Multi-KPI queries
+- Nested PU aggregations
+- Throughput calculations
+- Rework detection
+- Automation rate calculations
+- Prevent join multiplication using GLOBAL()
 
 Stress-test examples the assistant must solve:
 
@@ -689,7 +738,6 @@ Stress-test examples the assistant must solve:
 Ensure PU functions are used correctly and queries remain performant.
 """
     }
-
 
     base += f"\n## Complexity: {complexity}\n{instructions[complexity]}\n"
 
