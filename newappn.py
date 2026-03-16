@@ -844,9 +844,12 @@ pre, code {
 [data-testid="stChatInput"] textarea {
     background:#161b22 !important;
     border:1px solid #30363d !important;
-    color:#e2e8f0 !important;
+    color:#f1f5f9 !important;          /* ← was missing: light text color */
+    caret-color:#6366f1 !important;    /* visible cursor */
     border-radius:10px !important;
+    font-size:14px !important;
 }
+
 details { border:1px solid #1e2531 !important; border-radius:8px !important; }
 h1,h2,h3 { color:#f1f5f9 !important; }
 [data-testid="stMetric"] {
@@ -954,6 +957,50 @@ pre {
     background:#1e293b !important;
     border-color:#6366f1 !important;
     transform:scale(1.02);
+}
+
+/* ── Fix 1: Dark top toolbar / header bar ── */
+header[data-testid="stHeader"] {
+    background:#0a0c10 !important;
+    border-bottom:1px solid #1e2531 !important;
+}
+
+/* Hide the Streamlit deploy button & hamburger menu if desired */
+[data-testid="stToolbar"] {
+    background:#0a0c10 !important;
+}
+
+/* ── Fix 2: Chat input text visibility ── */
+[data-testid="stChatInput"] textarea {
+    background:#161b22 !important;
+    border:1px solid #30363d !important;
+    color:#f1f5f9 !important;          /* ← was missing: light text color */
+    caret-color:#6366f1 !important;    /* visible cursor */
+    border-radius:10px !important;
+    font-size:14px !important;
+}
+
+/* Fix placeholder text visibility */
+[data-testid="stChatInput"] textarea::placeholder {
+    color:#475569 !important;
+}
+
+/* Fix focused state border glow */
+[data-testid="stChatInput"] textarea:focus {
+    border-color:#6366f1 !important;
+    box-shadow:0 0 0 2px rgba(99,102,241,0.2) !important;
+    outline:none !important;
+}
+
+/* ── Fix 3: Main content area white gap ── */
+.main .block-container {
+    background:#0a0c10 !important;
+    padding-top:2rem !important;
+}
+
+/* Remove any white background on root */
+.stApp > header {
+    background:#0a0c10 !important;
 }
 </style>
 """, unsafe_allow_html=True)
