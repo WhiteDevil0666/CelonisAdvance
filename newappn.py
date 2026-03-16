@@ -1002,6 +1002,47 @@ header[data-testid="stHeader"] {
 .stApp > header {
     background:#0a0c10 !important;
 }
+
+/* ── Fix: Chat input bottom bar background ── */
+[data-testid="stBottom"] {
+    background:#0a0c10 !important;
+    border-top:1px solid #1e2531 !important;
+}
+
+[data-testid="stBottom"] > div {
+    background:#0a0c10 !important;
+}
+
+/* ── Fix: Remove red border, style input correctly ── */
+[data-testid="stChatInput"] {
+    background:#161b22 !important;
+    border:1px solid #30363d !important;
+    border-radius:10px !important;
+}
+
+[data-testid="stChatInput"]:focus-within {
+    border:1px solid #6366f1 !important;
+    box-shadow:0 0 0 2px rgba(99,102,241,0.15) !important;
+}
+
+/* Remove Streamlit's default red focus ring */
+[data-testid="stChatInput"] textarea:focus {
+    outline:none !important;
+    box-shadow:none !important;
+    border-color:transparent !important;
+}
+
+/* ── Fix: Placeholder + typed text ── */
+[data-testid="stChatInput"] textarea {
+    background:#161b22 !important;
+    color:#f1f5f9 !important;
+    caret-color:#6366f1 !important;
+    border:none !important;
+}
+
+[data-testid="stChatInput"] textarea::placeholder {
+    color:#475569 !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
