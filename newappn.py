@@ -803,25 +803,37 @@ st.set_page_config(
 
 st.markdown("""
 <style>
+
+/* ───────── Base App Background ───────── */
 .stApp { background:#0a0c10; }
-[data-testid="stSidebar"] { background:#0d1117; border-right:1px solid #1e2531; }
+.main .block-container { background:#0a0c10 !important; padding-top:2rem !important; }
+
+/* ───────── Top Header / Toolbar ───────── */
+header[data-testid="stHeader"] {
+    background:#0a0c10 !important;
+    border-bottom:1px solid #1e2531 !important;
+}
+.stApp > header { background:#0a0c10 !important; }
+[data-testid="stToolbar"] { background:#0a0c10 !important; }
+
+/* ── Hide heading anchor link icon ── */
+h1 a, h2 a, h3 a { display:none !important; }
+[data-testid="stHeadingWithActionElements"] a { display:none !important; }
+h1 .anchor-link, h2 .anchor-link, h3 .anchor-link {
+    display:none !important;
+    visibility:hidden !important;
+}
+[data-testid="stHeadingWithActionElements"] button,
+[data-testid="stHeadingWithActionElements"] svg { display:none !important; }
+
+/* ───────── Sidebar ───────── */
+[data-testid="stSidebar"] {
+    background:#0d1117;
+    border-right:1px solid #1e2531;
+}
 [data-testid="stSidebar"] label,
 [data-testid="stSidebar"] p,
 [data-testid="stSidebar"] span { color:#94a3b8 !important; }
-[data-testid="stChatMessage"] {
-    background:#0d1117 !important;
-    border:1px solid #1e2531;
-    border-radius:12px !important;
-    margin-bottom:10px;
-}
-[data-testid="stChatMessageContent"] p { color:#cbd5e1 !important; font-size:14px; }
-pre, code {
-    background:#0d1117 !important;
-    border:1px solid #30363d !important;
-    border-radius:8px !important;
-    color:#e6edf3 !important;
-    font-size:12.5px !important;
-}
 [data-testid="stSidebar"] input,
 [data-testid="stSidebar"] select {
     background:#161b22 !important;
@@ -829,99 +841,87 @@ pre, code {
     color:#e2e8f0 !important;
     border-radius:6px !important;
 }
-.stButton > button {
+
+/* ───────── Typography ───────── */
+h1, h2, h3 { color:#f1f5f9 !important; }
+
+/* ───────── Chat Messages ───────── */
+[data-testid="stChatMessage"] {
+    background:#0d1117 !important;
+    border:1px solid #1e2531;
+    border-radius:12px !important;
+    margin-bottom:10px;
+    box-shadow:0 4px 14px rgba(0,0,0,0.35);
+}
+[data-testid="stChatMessageContent"],
+[data-testid="stChatMessageContent"] p,
+[data-testid="stChatMessageContent"] li,
+[data-testid="stChatMessageContent"] span,
+[data-testid="stChatMessageContent"] ul { color:#e2e8f0 !important; font-size:14px; }
+[data-testid="stChatMessageContent"] strong { color:#f8fafc !important; }
+
+/* ───────── Chat Input Area ───────── */
+[data-testid="stBottom"] {
+    background:#0a0c10 !important;
+    border-top:1px solid #1e2531 !important;
+}
+[data-testid="stBottom"] > div { background:#0a0c10 !important; }
+
+[data-testid="stChatInput"] {
     background:#161b22 !important;
     border:1px solid #30363d !important;
-    color:#c7d2fe !important;
-    border-radius:8px !important;
-    font-size:12px !important;
+    border-radius:10px !important;
 }
-.stButton > button:hover { border-color:#6366f1 !important; color:#e0e7ff !important; }
+[data-testid="stChatInput"]:focus-within {
+    border:1px solid #6366f1 !important;
+    box-shadow:0 0 0 2px rgba(99,102,241,0.15) !important;
+}
+[data-testid="stChatInput"] textarea {
+    background:#161b22 !important;
+    color:#f1f5f9 !important;
+    caret-color:#6366f1 !important;
+    border:none !important;
+    border-radius:10px !important;
+    font-size:14px !important;
+}
+[data-testid="stChatInput"] textarea::placeholder { color:#475569 !important; }
+[data-testid="stChatInput"] textarea:focus {
+    outline:none !important;
+    box-shadow:none !important;
+    border-color:transparent !important;
+}
+
+/* ───────── Submit Button ───────── */
 [data-testid="stChatInputSubmitButton"] button {
     background:linear-gradient(135deg,#6366f1,#8b5cf6) !important;
     border:none !important;
 }
-[data-testid="stChatInput"] textarea {
-    background:#161b22 !important;
-    border:1px solid #30363d !important;
-    color:#f1f5f9 !important;          /* ← was missing: light text color */
-    caret-color:#6366f1 !important;    /* visible cursor */
+
+/* ───────── Code Blocks ───────── */
+pre {
+    background:#020617 !important;
+    border:1px solid #1e293b !important;
     border-radius:10px !important;
-    font-size:14px !important;
+    padding:14px !important;
+    overflow-x:auto !important;
 }
-
-details { border:1px solid #1e2531 !important; border-radius:8px !important; }
-h1,h2,h3 { color:#f1f5f9 !important; }
-[data-testid="stMetric"] {
-    background:#0d1117; border:1px solid #1e2531;
-    border-radius:10px; padding:10px 14px;
-}
-
-/* Improve visibility of assistant text */
-[data-testid="stChatMessageContent"] {
-    color:#e2e8f0 !important;
-}
-
-[data-testid="stChatMessageContent"] p {
-    color:#e2e8f0 !important;
-}
-
-[data-testid="stChatMessageContent"] li {
-    color:#e2e8f0 !important;
-}
-
-[data-testid="stChatMessageContent"] strong {
-    color:#f8fafc !important;
-}
-
-[data-testid="stChatMessageContent"] span {
-    color:#e2e8f0 !important;
-}
-
-/* Fix bullet visibility */
-[data-testid="stChatMessageContent"] ul {
-    color:#e2e8f0 !important;
-}
-
-/* Improve code block readability */
-pre, code {
-    background:#111827 !important;
-    border:1px solid #374151 !important;
+pre code, code {
+    background:#020617 !important;
+    border:1px solid #1e293b !important;
+    border-radius:8px !important;
     color:#f1f5f9 !important;
-}
-
-/* ───────── PQL Syntax Highlight ───────── */
-
-pre code {
-    color:#e6edf3 !important;
-    font-family: "JetBrains Mono", monospace !important;
+    font-family:"JetBrains Mono", monospace !important;
     font-size:13px !important;
     line-height:1.5 !important;
 }
 
-/* highlight functions */
-code .pu, code .fn {
-    color:#22c55e !important;
-    font-weight:600;
-}
-
-/* highlight table names */
-code .tbl {
-    color:#60a5fa !important;
-}
-
-/* highlight strings */
-code .str {
-    color:#facc15 !important;
-}
-
-/* highlight numbers */
-code .num {
-    color:#fb7185 !important;
-}
+/* ───────── PQL Syntax Highlight Classes ───────── */
+code .pu, code .fn { color:#22c55e !important; font-weight:600; }
+code .tbl          { color:#60a5fa !important; }
+code .str          { color:#facc15 !important; }
+code .num          { color:#fb7185 !important; }
 
 /* ───────── Function Badges ───────── */
-
 .func-badge {
     display:inline-block;
     padding:2px 8px;
@@ -935,139 +935,32 @@ code .num {
     letter-spacing:0.3px;
 }
 
-/* ───────── Better Code Blocks ───────── */
-
-pre {
-    background:#020617 !important;
-    border:1px solid #1e293b !important;
-    border-radius:10px !important;
-    padding:14px !important;
-    overflow-x:auto !important;
+/* ───────── Buttons ───────── */
+.stButton > button {
+    background:#161b22 !important;
+    border:1px solid #30363d !important;
+    color:#c7d2fe !important;
+    border-radius:8px !important;
+    font-size:12px !important;
 }
-
-/* ───────── Smooth Chat Bubbles ───────── */
-
-[data-testid="stChatMessage"] {
-    box-shadow:0 4px 14px rgba(0,0,0,0.35);
-}
-
-/* ───────── Sidebar Hover Effects ───────── */
-
 .stButton > button:hover {
     background:#1e293b !important;
     border-color:#6366f1 !important;
+    color:#e0e7ff !important;
     transform:scale(1.02);
 }
 
-/* ── Fix 1: Dark top toolbar / header bar ── */
-header[data-testid="stHeader"] {
-    background:#0a0c10 !important;
-    border-bottom:1px solid #1e2531 !important;
+/* ───────── Misc Components ───────── */
+details { border:1px solid #1e2531 !important; border-radius:8px !important; }
+[data-testid="stMetric"] {
+    background:#0d1117;
+    border:1px solid #1e2531;
+    border-radius:10px;
+    padding:10px 14px;
 }
 
-/* Hide the Streamlit deploy button & hamburger menu if desired */
-[data-testid="stToolbar"] {
-    background:#0a0c10 !important;
-}
-
-/* ── Fix 2: Chat input text visibility ── */
-[data-testid="stChatInput"] textarea {
-    background:#161b22 !important;
-    border:1px solid #30363d !important;
-    color:#f1f5f9 !important;          /* ← was missing: light text color */
-    caret-color:#6366f1 !important;    /* visible cursor */
-    border-radius:10px !important;
-    font-size:14px !important;
-}
-
-/* Fix placeholder text visibility */
-[data-testid="stChatInput"] textarea::placeholder {
-    color:#475569 !important;
-}
-
-/* Fix focused state border glow */
-[data-testid="stChatInput"] textarea:focus {
-    border-color:#6366f1 !important;
-    box-shadow:0 0 0 2px rgba(99,102,241,0.2) !important;
-    outline:none !important;
-}
-
-/* ── Fix 3: Main content area white gap ── */
-.main .block-container {
-    background:#0a0c10 !important;
-    padding-top:2rem !important;
-}
-
-/* Remove any white background on root */
-.stApp > header {
-    background:#0a0c10 !important;
-}
-
-/* ── Fix: Chat input bottom bar background ── */
-[data-testid="stBottom"] {
-    background:#0a0c10 !important;
-    border-top:1px solid #1e2531 !important;
-}
-
-[data-testid="stBottom"] > div {
-    background:#0a0c10 !important;
-}
-
-/* ── Fix: Remove red border, style input correctly ── */
-[data-testid="stChatInput"] {
-    background:#161b22 !important;
-    border:1px solid #30363d !important;
-    border-radius:10px !important;
-}
-
-[data-testid="stChatInput"]:focus-within {
-    border:1px solid #6366f1 !important;
-    box-shadow:0 0 0 2px rgba(99,102,241,0.15) !important;
-}
-
-/* Remove Streamlit's default red focus ring */
-[data-testid="stChatInput"] textarea:focus {
-    outline:none !important;
-    box-shadow:none !important;
-    border-color:transparent !important;
-}
-
-/* ── Fix: Placeholder + typed text ── */
-[data-testid="stChatInput"] textarea {
-    background:#161b22 !important;
-    color:#f1f5f9 !important;
-    caret-color:#6366f1 !important;
-    border:none !important;
-}
-
-[data-testid="stChatInput"] textarea::placeholder {
-    color:#475569 !important;
-}
-/* ── Fix: Hide heading anchor link icon ── */
-h1 a, h2 a, h3 a {
-    display:none !important;
-}
-
-/* Streamlit-specific anchor button on headings */
-[data-testid="stHeadingWithActionElements"] a {
-    display:none !important;
-}
-
-h1 .anchor-link,
-h2 .anchor-link,
-h3 .anchor-link {
-    display:none !important;
-    visibility:hidden !important;
-}
-
-/* Hide the entire action element wrapper if needed */
-[data-testid="stHeadingWithActionElements"] button,
-[data-testid="stHeadingWithActionElements"] svg {
-    display:none !important;
-}
 </style>
 """, unsafe_allow_html=True)
-
 # ──────────────────────────────────────────────────────────────
 #  SECTION 6 · SESSION STATE
 # ──────────────────────────────────────────────────────────────
