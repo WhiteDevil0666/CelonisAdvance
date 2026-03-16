@@ -816,6 +816,35 @@ header[data-testid="stHeader"] {
 .stApp > header { background:#0a0c10 !important; }
 [data-testid="stToolbar"] { background:#0a0c10 !important; }
 
+/* ───────── Fix: H1 Title Visibility ───────── */
+h1, h2, h3,
+h1 *, h2 *, h3 * {
+    color:#f1f5f9 !important;
+}
+[data-testid="stHeadingWithActionElements"] h1,
+[data-testid="stHeadingWithActionElements"] h2,
+[data-testid="stHeadingWithActionElements"] h3 {
+    color:#f1f5f9 !important;
+}
+div[data-testid="stMarkdownContainer"] h1,
+div[data-testid="stMarkdownContainer"] h2,
+div[data-testid="stMarkdownContainer"] h3 {
+    color:#f1f5f9 !important;
+}
+
+/* ───────── Fix: Caption / subtitle text ───────── */
+[data-testid="stCaptionContainer"] p,
+[data-testid="stCaptionContainer"],
+.stCaption, .stCaption p {
+    color:#64748b !important;
+    font-size:13px !important;
+}
+
+/* ───────── General Markdown Text ───────── */
+div[data-testid="stMarkdownContainer"] p {
+    color:#cbd5e1 !important;
+}
+
 /* ── Hide heading anchor link icon ── */
 h1 a, h2 a, h3 a { display:none !important; }
 [data-testid="stHeadingWithActionElements"] a { display:none !important; }
@@ -841,9 +870,6 @@ h1 .anchor-link, h2 .anchor-link, h3 .anchor-link {
     color:#e2e8f0 !important;
     border-radius:6px !important;
 }
-
-/* ───────── Typography ───────── */
-h1, h2, h3 { color:#f1f5f9 !important; }
 
 /* ───────── Chat Messages ───────── */
 [data-testid="stChatMessage"] {
