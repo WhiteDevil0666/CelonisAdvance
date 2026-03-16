@@ -1043,6 +1043,28 @@ header[data-testid="stHeader"] {
 [data-testid="stChatInput"] textarea::placeholder {
     color:#475569 !important;
 }
+/* ── Fix: Hide heading anchor link icon ── */
+h1 a, h2 a, h3 a {
+    display:none !important;
+}
+
+/* Streamlit-specific anchor button on headings */
+[data-testid="stHeadingWithActionElements"] a {
+    display:none !important;
+}
+
+h1 .anchor-link,
+h2 .anchor-link,
+h3 .anchor-link {
+    display:none !important;
+    visibility:hidden !important;
+}
+
+/* Hide the entire action element wrapper if needed */
+[data-testid="stHeadingWithActionElements"] button,
+[data-testid="stHeadingWithActionElements"] svg {
+    display:none !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
