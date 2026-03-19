@@ -1051,15 +1051,17 @@ pre code {
   box-shadow: 0 0 0 3px var(--accent-glow), 0 4px 24px rgba(0,0,0,0.4) !important;
 }
 [data-testid="stChatInput"] textarea {
-  background: transparent !important;
-  color: var(--text-primary) !important;
+  background: var(--bg-elevated) !important;
+  color: #e8edf5 !important;
   caret-color: var(--accent) !important;
   border: none !important;
   font-size: 14px !important;
   font-family: var(--font-body) !important;
   line-height: 1.6 !important;
+  -webkit-text-fill-color: #e8edf5 !important;
 }
 [data-testid="stChatInput"] textarea::placeholder { color: var(--text-muted) !important; }
+[data-testid="stChatInput"] textarea:focus { color: #e8edf5 !important; -webkit-text-fill-color: #e8edf5 !important; }
 [data-testid="stChatInputSubmitButton"] button {
   background: var(--accent) !important;
   border: none !important;
