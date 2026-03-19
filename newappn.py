@@ -342,8 +342,6 @@ Units: DAYS | HOURS | MINUTES | SECONDS | MILLISECONDS
     'EXCLUSIVE_CHOICE': 'Models XOR gateway in BPMN_CONFORMS.',
     'ALLOW': 'Allows deviations in BPMN_CONFORMS. Syntax: ALLOW( BPMN_MATCH_UNDESIRED(ANY) )',
     'COUNT': 'Counts non-NULL rows. Syntax: COUNT(table.column). Often wrapped with GLOBAL() when mixing table levels.',
-
-    # ── Standard aggregation (missing) ──────────────────────────
     'AVG': 'Standard average aggregation per group. Syntax: AVG( table.column ) Returns FLOAT. Respects global filters (unlike PU_AVG).',
     'SUM': 'Standard sum aggregation per group. Syntax: SUM( table.column ) Respects global filters (unlike PU_SUM).',
     'MAX': 'Standard maximum per group. Syntax: MAX( table.column )',
@@ -352,8 +350,6 @@ Units: DAYS | HOURS | MINUTES | SECONDS | MILLISECONDS
     'VAR': 'Variance (n-1 method) per group. Syntax: VAR( table.column )',
     'TRIMMED_MEAN': 'Trimmed mean per group excluding outliers. Syntax: TRIMMED_MEAN( table.column [, lower_cutoff [, upper_cutoff]] )',
     'COUNT_DISTINCT': 'Distinct count per group. Syntax: COUNT_DISTINCT( table.column ) Use COUNT when column is already a key.',
-
-    # ── Window / Moving aggregation (all missing) ─────────────
     'MOVING_AVG': 'Moving average over ordered rows within partition. Syntax: MOVING_AVG( table.col, lower_bound, upper_bound [, ORDER BY ...] [, PARTITION BY ...] )',
     'MOVING_SUM': 'Moving sum over a window of rows. Syntax: MOVING_SUM( table.col, lower_bound, upper_bound [, ORDER BY ...] [, PARTITION BY ...] )',
     'MOVING_COUNT': 'Moving count over a window of rows. Syntax: MOVING_COUNT( table.col, lower_bound, upper_bound [, ORDER BY ...] [, PARTITION BY ...] )',
@@ -365,18 +361,12 @@ Units: DAYS | HOURS | MINUTES | SECONDS | MILLISECONDS
     'MOVING_TRIMMED_MEAN': 'Moving trimmed mean. Syntax: MOVING_TRIMMED_MEAN( table.col, lower_bound, upper_bound [, lower_cutoff, upper_cutoff] [, ORDER BY ...] [, PARTITION BY ...] )',
     'MOVING_VAR': 'Moving variance. Syntax: MOVING_VAR( table.col, lower_bound, upper_bound [, ORDER BY ...] [, PARTITION BY ...] )',
     'RUNNING_TOTAL': 'Cumulative running total (alias of RUNNING_SUM in older PQL versions). Syntax: RUNNING_TOTAL( table.col [, ORDER BY ...] [, PARTITION BY ...] )',
-
-    # ── DateTime difference (missing) ────────────────────────────
     'DATE_BETWEEN': 'Difference between two dates in days (integer). Syntax: DATE_BETWEEN( table.date1, table.date2 ) Returns INT.',
     'DAYS_BETWEEN': 'Difference in days (float). Syntax: DAYS_BETWEEN( table.date1, table.date2 [, calendar] )',
     'MONTHS_BETWEEN': 'Difference in months. Syntax: MONTHS_BETWEEN( table.date1, table.date2 )',
     'YEARS_BETWEEN': 'Difference in years. Syntax: YEARS_BETWEEN( table.date1, table.date2 )',
-
-    # ── DateTime modification (missing) ──────────────────────────
     'ADD_MONTHS': 'Adds months to a date. Syntax: ADD_MONTHS( table.date_col, table.months_col )',
     'ADD_YEARS': 'Adds years to a date. Syntax: ADD_YEARS( table.date_col, table.years_col )',
-
-    # ── DateTime projection (missing) ────────────────────────────
     'CALENDAR_WEEK': 'Returns the calendar week number (1-53) of a date. Syntax: CALENDAR_WEEK( table.date_col )',
     'DAY': 'Returns the day of month (1-31) from a date. Syntax: DAY( table.date_col )',
     'DAY_OF_WEEK': 'Returns day of week (1=Monday … 7=Sunday). Syntax: DAY_OF_WEEK( table.date_col )',
@@ -387,14 +377,10 @@ Units: DAYS | HOURS | MINUTES | SECONDS | MILLISECONDS
     'MINUTES': 'Returns the minute component (0-59). Syntax: MINUTES( table.timestamp_col )',
     'SECONDS': 'Returns the seconds component (0-59). Syntax: SECONDS( table.timestamp_col )',
     'MILLIS': 'Returns the milliseconds component. Syntax: MILLIS( table.timestamp_col )',
-
-    # ── DateTime rounding (missing) ───────────────────────────────
     'ROUND_HOUR': 'Rounds timestamp down to the nearest hour. Syntax: ROUND_HOUR( table.timestamp_col )',
     'ROUND_MINUTE': 'Rounds timestamp down to the nearest minute. Syntax: ROUND_MINUTE( table.timestamp_col )',
     'ROUND_SECOND': 'Rounds timestamp down to the nearest second. Syntax: ROUND_SECOND( table.timestamp_col )',
     'ROUND_YEAR': 'Rounds date down to start of year. Syntax: ROUND_YEAR( table.date_col )',
-
-    # ── Math (missing) ────────────────────────────────────────────
     'ABC': 'Absolute value (alias of ABS). Syntax: ABC( table.column )',
     'ADD': 'Addition operator. Also available as + operator. Syntax: ADD( col1, col2 ) or col1 + col2',
     'CEIL': 'Rounds up to nearest integer. Syntax: CEIL( table.column ) Returns INT.',
@@ -406,8 +392,6 @@ Units: DAYS | HOURS | MINUTES | SECONDS | MILLISECONDS
     'SQRT': 'Square root. Syntax: SQRT( table.column ) Returns FLOAT.',
     'SQUARE': 'Squares a value. Syntax: SQUARE( table.column ) Returns FLOAT. Equivalent to POWER(col, 2).',
     'SUB': 'Subtraction operator. Also available as - operator. Syntax: SUB( col1, col2 ) or col1 - col2',
-
-    # ── Predicate (missing) ──────────────────────────────────────
     'BETWEEN': 'Checks if value is within range (inclusive). Syntax: table.col BETWEEN lower AND upper Returns 1/0.',
     'IS_NULL': 'Returns 1 if value is NULL. Syntax: table.col IS NULL (operator form, not function). Same as ISNULL().',
     'LIKE': 'Pattern matching with wildcards. Syntax: table.col LIKE "pattern%" where % = any chars, _ = one char.',
@@ -420,24 +404,14 @@ Units: DAYS | HOURS | MINUTES | SECONDS | MILLISECONDS
     'STR_TO_INT': 'Converts string to integer. Syntax: STR_TO_INT( table.string_col ) Returns INT or NULL if not numeric.',
     'STRINGHASH': 'Returns hash of string as INT. Syntax: STRINGHASH( table.string_col )',
     'SUBSTRING': 'Extracts substring. Syntax: SUBSTRING( table.string_col, start_pos [, length] ) 1-based indexing.',
-
-    # ── Process (missing) ─────────────────────────────────────────
     'ACTIVATION_COUNT': 'Returns number of times an edge (transition) was activated. Syntax: ACTIVATION_COUNT( SOURCE["A"] TARGET["B"] )',
     'CLUSTER_VARIANTS': 'Clusters process variants. Syntax: CLUSTER_VARIANTS( k [, ESTIMATE_CLUSTER_PARAMS(...)] )',
     'ESTIMATE_CLUSTER_PARAMS': 'Estimates optimal cluster parameters for CLUSTER_VARIANTS. Syntax: ESTIMATE_CLUSTER_PARAMS( max_k )',
     'PROCESS_EQUALS': 'Checks if case follows exact process sequence. Syntax: PROCESS_EQUALS( "A" > "B" > "C" ) Returns 1/0.',
     'SOURCE_TARGET': 'Computes values for process edges (transitions). SOURCE("ACTIVITIES"."TIMESTAMP") gives start timestamp; TARGET gives end timestamp of the edge.',
-
-    # ── Statistics (missing) ──────────────────────────────────────
     'QNORM': 'Quantile of normal distribution. Syntax: QNORM( probability ) Returns FLOAT. probability: 0.0-1.0.',
-
-    # ── ML (missing) ──────────────────────────────────────────────
     'DECISION_TREE': 'Decision tree classification. Syntax: DECISION_TREE( TRAIN_DT( INPUT(...), OUTPUT(...) ), PREDICT(...) )',
-
-    # ── Custom (missing) ──────────────────────────────────────────
     'USER_NAME': 'Returns the currently logged-in username. Syntax: USER_NAME() Returns STRING.',
-
-    # ── Data generation (missing) ─────────────────────────────────
     'RANGE': 'Creates a range of values (older syntax). Syntax: RANGE( start, end, step ) Use GENERATE_RANGE in modern PQL.',
 }
 
@@ -592,36 +566,23 @@ CATEGORY_ICONS = {
 FUNCTION_NAMES = list(COMPACT_REFS.keys())
 PU_FUNCTIONS = [fn for fn in FUNCTION_NAMES if fn.startswith("PU_")]
 
-# Intent → function mapping based on official Celonis docs
 INTENT_PATTERNS = [
-    # PU aggregation hints
     (r'per\s+(case|vendor|order|customer|supplier|group|\w+)', PU_FUNCTIONS[:8]),
     (r'(aggregate|group\s+by|count\s+per|sum\s+per|average\s+per)', PU_FUNCTIONS[:8]),
-    # Throughput hints → always suggest CALC_THROUGHPUT
     (r'(throughput|cycle.?time|lead.?time|duration|process.?time|elapsed)', ['CALC_THROUGHPUT', 'REMAP_TIMESTAMPS', 'GLOBAL']),
     (r'(first.*last|start.*end|begin.*end).*(time|date|day)', ['CALC_THROUGHPUT', 'REMAP_TIMESTAMPS', 'PU_FIRST', 'PU_LAST', 'DATEDIFF']),
-    # Rework hints
     (r'(rework|repeat|loop|same.?activit|revisit|multiple.?time)', ['CALC_REWORK', 'INDEX_ACTIVITY_LOOP', 'INDEX_ACTIVITY_TYPE']),
-    # Process path hints
     (r'(conform|path|sequence|order.*activit|activit.*order|follow)', ['MATCH_PROCESS', 'MATCH_ACTIVITIES', 'CALC_THROUGHPUT']),
-    # Date/time hints
     (r'(days?\s+between|hours?\s+between|date.?diff|workday|calendar)', ['DATEDIFF', 'HOURS_BETWEEN', 'WORKDAYS_BETWEEN', 'REMAP_TIMESTAMPS']),
-    # Automation rate hint
     (r'(automat|system.?activit|manual.?activit|bot)', ['PU_COUNT', 'CALC_REWORK', 'GLOBAL']),
-    # Variant hints
     (r'(variant|process.?flow|happy.?path)', ['VARIANT', 'MATCH_PROCESS', 'MATCH_PROCESS_REGEX']),
-    # Running/window hints
     (r'(running|cumulative|rolling|window|moving)', ['RUNNING_SUM', 'WINDOW_AVG', 'INDEX_ORDER']),
-    # Filter hints
     (r'(filter|where|only.*cases|exclude)', ['FILTER', 'MATCH_ACTIVITIES', 'BIND_FILTERS']),
 ]
 
 def detect_functions(text: str):
     text_lower = text.lower()
     found = set()
-
-    # Functions that are short or match common English words need word-boundary matching
-    # to avoid false positives (e.g. 'IN' matching 'filter', 'MIN' matching 'minimum', etc.)
     NEEDS_WORD_BOUNDARY = {
         'AVG', 'SUM', 'MAX', 'MIN', 'VAR', 'IN', 'OR', 'AND', 'NOT',
         'ADD', 'SUB', 'DIV', 'MULT', 'LOG', 'LEN', 'ABS', 'ABC',
@@ -631,24 +592,17 @@ def detect_functions(text: str):
         'REVERSE', 'BETWEEN', 'SOURCE_TARGET', 'END', 'BY', 'TO',
         'STDEV', 'COUNT', 'FILTER', 'BIND', 'LOOKUP', 'UPPER', 'LOWER',
     }
-
-    # 1. Direct function name detection — word-boundary aware
     for fn in FUNCTION_NAMES:
         fn_lower = fn.lower()
         if fn in NEEDS_WORD_BOUNDARY:
-            # Use word boundary so 'IN' doesn't match 'filter', 'MIN' doesn't match 'minimum'
             if re.search(r'\b' + re.escape(fn_lower) + r'\b', text_lower):
                 found.add(fn)
         else:
-            # Long unambiguous names: safe to use simple substring match
             if fn_lower in text_lower:
                 found.add(fn)
-
-    # 2. Intent-based detection (unchanged)
     for pattern, fns in INTENT_PATTERNS:
         if re.search(pattern, text_lower):
             found.update(fns)
-
     return list(found)
 
 def build_function_context(user_query: str):
@@ -657,7 +611,7 @@ def build_function_context(user_query: str):
         return ""
     docs = []
     seen = set()
-    for fn in funcs[:20]:  # expanded from 12
+    for fn in funcs[:20]:
         if fn in COMPACT_REFS and fn not in seen:
             seen.add(fn)
             docs.append(f"### {fn}\n{COMPACT_REFS[fn]}")
@@ -675,14 +629,13 @@ GROQ_MODELS = {
 }
 
 # ──────────────────────────────────────────────────────────────
-#  SECTION 3 · SYSTEM PROMPT BUILDER  (hardened)
+#  SECTION 3 · SYSTEM PROMPT BUILDER
 # ──────────────────────────────────────────────────────────────
 
 _FUNCTION_SELECTION_GUIDE = """
 ## ─── OFFICIAL CELONIS FUNCTION SELECTION GUIDE ───
-## Source: docs.celonis.com — use this to choose the RIGHT function every time
 
-### THROUGHPUT TIME — which function to use?
+### THROUGHPUT TIME
 
 | Goal | Correct function | WRONG approach |
 |------|-----------------|----------------|
@@ -691,104 +644,47 @@ _FUNCTION_SELECTION_GUIDE = """
 | Throughput OVER MULTIPLE CASES (grouped) | DATEDIFF('dd', PU_MIN("GROUP","ACTIVITIES"."TIMESTAMP"), PU_MAX("GROUP","ACTIVITIES"."TIMESTAMP")) | CALC_THROUGHPUT |
 | Cycle time first→last event per case | DATEDIFF('dd', PU_FIRST("CASES","ACTIVITIES"."TIMESTAMP", ORDER BY ...), PU_LAST("CASES","ACTIVITIES"."TIMESTAMP", ORDER BY ...)) | PU_AVG wrapping DATEDIFF |
 | Average throughput across all cases | AVG(CALC_THROUGHPUT(...)) | PU_AVG wrapping CALC_THROUGHPUT |
-| Edge throughput (activity→next activity) | SOURCE/TARGET + SECONDS_BETWEEN or REMAP_TIMESTAMPS | CALC_THROUGHPUT |
 
-### REWORK / REPEATED ACTIVITIES — which function to use?
+### REWORK / REPEATED ACTIVITIES
 
 | Goal | Correct function |
 |------|-----------------|
 | Count activities per case | CALC_REWORK() |
-| Count specific activity per case | CALC_REWORK("ACTIVITIES"."ACTIVITY" = 'Review') |
 | Detect repeated activities (row-level) | INDEX_ACTIVITY_LOOP("ACTIVITIES"."ACTIVITY") > 0 |
-| Count per activity type at a point | INDEX_ACTIVITY_TYPE("ACTIVITIES"."ACTIVITY") |
-| Cases where activity repeats > N times | FILTER PU_COUNT("CASES","ACTIVITIES"."CASE_ID","ACTIVITIES"."ACTIVITY"='Review') > N |
 
-### AGGREGATION — which PU function to use?
+### AGGREGATION
 
 | Goal | Correct function | Avoid |
 |------|-----------------|-------|
 | Count rows (key column) | PU_COUNT | PU_COUNT_DISTINCT (slower) |
-| Count distinct values | PU_COUNT_DISTINCT | - |
-| Sum values | PU_SUM | - |
 | Average values | PU_AVG | PU_MEDIAN (much slower) |
-| True median | PU_MEDIAN | - |
-| First/Last value | PU_FIRST / PU_LAST with ORDER BY | Without ORDER BY (undefined) |
-| Simple count vs sum | PU_COUNT (less expensive than PU_SUM) | - |
+| First/Last value | PU_FIRST / PU_LAST with ORDER BY | Without ORDER BY |
 
-### FILTERING — which approach?
-
-| Goal | Correct approach |
-|------|-----------------|
-| Simple row filter | FILTER "TABLE"."COL" = 'value' |
-| Filter within PU function | PU_COUNT("CASES","ACTIVITIES"."COL", "ACTIVITIES"."COL" = 'X') — use filter arg |
-| Filter on aggregation result | FILTER PU_COUNT(...) > 5 |
-| Filter-aware PU (avoid) | FILTER_TO_NULL inside PU — BREAKS CACHING, avoid unless no alternative |
-| Filter to different table | BIND_FILTERS( target_table, condition ) |
-
-### PROCESS MATCHING — which function?
-
-| Goal | Correct function |
-|------|-----------------|
-| Cases containing specific activities (no order) | MATCH_ACTIVITIES |
-| Cases following specific ordered path | MATCH_PROCESS |
-| Cases matching activity name pattern (regex) | MATCH_PROCESS_REGEX |
-| Cases where activity is at specific position | INDEX_ACTIVITY_ORDER |
-
-### WHEN TO USE GLOBAL()
-
-Use GLOBAL() when:
-1. Query has BOTH case-level AND activity-level columns → common table shifts to activity level
-2. CALC_THROUGHPUT combined with COUNT/SUM/AVG
-3. Comparing per-group value to overall average: CASE WHEN AVG(...) > GLOBAL(AVG(...)) THEN ...
-Do NOT use GLOBAL() when: query is purely case-level or purely activity-level
-
-### COMMON TABLE RULES (from Celonis docs)
-- PU-functions IGNORE global filters (cached)
-- Standard aggregations (AVG, COUNT, SUM) RESPECT global filters (not cached)
-- FILTER_TO_NULL makes PU filter-aware BUT breaks caching — avoid
-- PU functions result type: PU_COUNT → INT, PU_SUM → same as source, PU_AVG → always FLOAT
-- PU_COUNT returns 0 for no match; all other PU functions return NULL for no match
-
-### NULL BEHAVIOUR REFERENCE
-| Function | No matching rows | NULL in source |
-|----------|-----------------|----------------|
-| PU_COUNT | 0 | ignored (row excluded) |
-| PU_COUNT_DISTINCT | 0 | ignored |
-| PU_SUM, PU_AVG, PU_MIN, PU_MAX | NULL | ignored |
-| PU_FIRST, PU_LAST | NULL | treated as non-existent |
-| CALC_THROUGHPUT | NULL if single activity or end<start | - |
-| DATEDIFF | NULL if any param is NULL | - |
+### NULL BEHAVIOUR
+| Function | No matching rows |
+|----------|-----------------|
+| PU_COUNT | 0 |
+| PU_SUM, PU_AVG, PU_MIN, PU_MAX | NULL |
+| PU_FIRST, PU_LAST | NULL |
+| CALC_THROUGHPUT | NULL if single activity or end<start |
 """
 
 _SQL_PROHIBITION = """
 ## CRITICAL — PQL IS NOT SQL. NEVER WRITE SQL.
 
-These SQL keywords DO NOT EXIST in PQL. If you write any of them, the query is WRONG:
-  NO: SELECT   FROM    JOIN    LEFT JOIN   GROUP BY
-  NO: HAVING   WITH    AS (CTE alias)   OVER(...)   ORDER BY (as standalone SQL clause)
+NO: SELECT   FROM    JOIN    LEFT JOIN   GROUP BY   HAVING   WITH   OVER(...)
 
-### WRONG — SQL (never write this):
+### WRONG — SQL:
 ```sql
-SELECT "LFA1"."LIFNR",
-       AVG(DATEDIFF(dd, "EKKO"."BEDAT", "EKPO"."LGDAT")) AS LEAD_TIME
-FROM "EKKO"
-JOIN "EKPO" ON "EKKO"."EBELN" = "EKPO"."EBELN"
+SELECT "LFA1"."LIFNR", AVG(DATEDIFF(dd, "EKKO"."BEDAT", "EKPO"."LGDAT")) AS LEAD_TIME
+FROM "EKKO" JOIN "EKPO" ON "EKKO"."EBELN" = "EKPO"."EBELN"
 GROUP BY "LFA1"."LIFNR"
 ```
 
 ### CORRECT — real PQL:
 ```pql
--- Average lead time per vendor (PU aggregates child → parent)
-PU_AVG(
-  "LFA1",
-  DATEDIFF(dd, "EKKO"."BEDAT", "EKPO"."LGDAT")
-)
+PU_AVG("LFA1", DATEDIFF(dd, "EKKO"."BEDAT", "EKPO"."LGDAT"))
 ```
-
-PQL works by referencing columns directly and using PU-functions to
-aggregate across table relationships. There is NO SELECT, NO FROM, NO JOIN.
-Each expression is a single column-level formula evaluated per row of the
-result table.
 """
 
 _ADVANCED_PATTERNS = """
@@ -796,191 +692,35 @@ _ADVANCED_PATTERNS = """
 
 ### P1 · GLOBAL() — prevents join multiplication
 ```pql
--- WRONG: CALC_THROUGHPUT multiplied by activity count
-AVG( CALC_THROUGHPUT( CASE_START TO CASE_END, REMAP_TIMESTAMPS("ACTIVITIES"."TIMESTAMP", DAYS) ) )
--- CORRECT
 GLOBAL( AVG( CALC_THROUGHPUT( CASE_START TO CASE_END, REMAP_TIMESTAMPS("ACTIVITIES"."TIMESTAMP", DAYS) ) ) )
 ```
 
-### P2 · Nested PU aggregation across 3 levels
+### P4 · Throughput per case
 ```pql
-PU_SUM( "VENDORS", PU_SUM( "ORDERS", "LINE_ITEMS"."AMOUNT" ) )
+CALC_THROUGHPUT(CASE_START TO CASE_END, REMAP_TIMESTAMPS( "ACTIVITIES"."TIMESTAMP", DAYS ))
+AVG(CALC_THROUGHPUT(CASE_START TO CASE_END, REMAP_TIMESTAMPS( "ACTIVITIES"."TIMESTAMP", DAYS )))
 ```
 
-### P3 · PU with filter argument (caching-friendly, preferred)
+### P9 · Cycle time: first to last event
 ```pql
-PU_COUNT( "CASES", "ACTIVITIES"."CASE_ID", "ACTIVITIES"."ACTIVITY" = 'Approve' )
-```
-
-### P4 · Throughput per case — official Celonis doc patterns
-```pql
--- Case start to end (days) — from official Celonis docs
-CALC_THROUGHPUT(
-  CASE_START TO CASE_END,
-  REMAP_TIMESTAMPS( "ACTIVITIES"."TIMESTAMP", DAYS )
+-- CORRECT — cycle time per case row:
+DATEDIFF('dd',
+  PU_FIRST("CASES", "ACTIVITIES"."TIMESTAMP", ORDER BY ( "ACTIVITIES"."TIMESTAMP" ASC )),
+  PU_LAST("CASES", "ACTIVITIES"."TIMESTAMP", ORDER BY ( "ACTIVITIES"."TIMESTAMP" ASC ))
 )
-
--- Case start to end (hours, then /24 for days) — from official Celonis FAQ pattern
-CALC_THROUGHPUT(
-  CASE_START TO CASE_END,
-  REMAP_TIMESTAMPS( "ACTIVITIES"."TIMESTAMP", HOURS )
-) / 24
-
--- Between specific activities
-CALC_THROUGHPUT(
-  FIRST_OCCURRENCE['Create Order'] TO LAST_OCCURRENCE['Ship'],
-  REMAP_TIMESTAMPS( "ACTIVITIES"."TIMESTAMP", DAYS )
-)
-
--- Average throughput across all cases (standard aggregation wrapping CALC_THROUGHPUT)
-AVG(
-  CALC_THROUGHPUT(
-    CASE_START TO CASE_END,
-    REMAP_TIMESTAMPS( "ACTIVITIES"."TIMESTAMP", DAYS )
-  )
-)
-
--- Conforming throughput — official Celonis docs pattern
-AVG(
-  CASE WHEN PU_SUM( "CASES", ABS( conformance_col ) ) = 0
-  THEN CALC_THROUGHPUT(
-         CASE_START TO CASE_END,
-         REMAP_TIMESTAMPS( "ACTIVITIES"."TIMESTAMP", HOURS )
-       ) / 24
-  ELSE NULL END
-)
-```
-NOTE: CALC_THROUGHPUT is the preferred approach for case throughput. It is better than
-DATEDIFF(PU_MIN("CASES", ...), PU_MAX("CASES", ...)) because it handles edge cases
-(single-activity cases → NULL, start > end → NULL) and supports calendars via REMAP_TIMESTAMPS.
-Throughput OVER MULTIPLE CASES uses PU_MIN and PU_MAX (not CALC_THROUGHPUT):
-```pql
--- Throughput over multiple cases grouped by vendor (from Celonis docs)
-DATEDIFF(
-  'dd',
-  PU_MIN( "VENDORS", "ACTIVITIES"."TIMESTAMP" ),
-  PU_MAX( "VENDORS", "ACTIVITIES"."TIMESTAMP" )
-)
-```
-
-### P5 · Rework detection
-```pql
-FILTER PU_COUNT(
-  "CASES", "ACTIVITIES"."CASE_ID",
-  "ACTIVITIES"."ACTIVITY" = 'Review'
-) > 2;
-```
-
-### P6 · Running total partitioned by group and month
-```pql
-RUNNING_SUM(
-  "ORDERS"."AMOUNT",
-  ORDER BY ( ROUND_MONTH( "ORDERS"."ORDER_DATE" ) ASC ),
-  PARTITION BY ( "ORDERS"."VENDOR_ID" )
-)
-```
-
-### P7 · Safe KPI ratio
-```pql
-GLOBAL( COUNT( "ACTIVITIES"."TIMESTAMP" ) ) /
-GLOBAL( COUNT( "CASES"."CASE_ID" ) )
-```
-
-### P8 · Workdays between dates
-```pql
-WORKDAYS_BETWEEN(
-  WORKDAY_CALENDAR( WEEKDAY_CALENDAR( MON, TUE, WED, THU, FRI ) ),
-  "ORDERS"."CREATE_DATE",
-  "ORDERS"."CLOSE_DATE"
-)
-```
-
-### P9 · Cycle time: first to last event per case (days)
-CRITICAL RULE: PU_FIRST / PU_LAST pull scalar DATE values UP to the case table.
-Once they are at case-table level, use DATEDIFF directly between them.
-NEVER wrap an outer PU_AVG around DATEDIFF(PU_FIRST(...), PU_LAST(...)) —
-PU_FIRST and PU_LAST are already case-level scalars; there is nothing left to aggregate over.
-
-```pql
--- WRONG — PU_AVG wrapping DATEDIFF of already-aggregated PU values:
-PU_AVG(
-  "CASES",
-  DATEDIFF( 'dd',
-    PU_FIRST( "CASES", "ACTIVITIES"."TIMESTAMP", ORDER BY "ACTIVITIES"."TIMESTAMP" ASC ),
-    PU_LAST(  "CASES", "ACTIVITIES"."TIMESTAMP", ORDER BY "ACTIVITIES"."TIMESTAMP" ASC )
-  )
-)
-
--- CORRECT — cycle time per case row (shows on case table):
-DATEDIFF(
-  'dd',
-  PU_FIRST(
-    "CASES",
-    "ACTIVITIES"."TIMESTAMP",
-    ORDER BY ( "ACTIVITIES"."TIMESTAMP" ASC )
-  ),
-  PU_LAST(
-    "CASES",
-    "ACTIVITIES"."TIMESTAMP",
-    ORDER BY ( "ACTIVITIES"."TIMESTAMP" ASC )
-  )
-)
-
--- CORRECT — average cycle time across all cases (single KPI number):
-AVG(
-  DATEDIFF(
-    'dd',
-    PU_FIRST(
-      "CASES",
-      "ACTIVITIES"."TIMESTAMP",
-      ORDER BY ( "ACTIVITIES"."TIMESTAMP" ASC )
-    ),
-    PU_LAST(
-      "CASES",
-      "ACTIVITIES"."TIMESTAMP",
-      ORDER BY ( "ACTIVITIES"."TIMESTAMP" ASC )
-    )
-  )
-)
-```
-
-### P10 · General rule — never nest PU inside PU value argument
-PU functions return a scalar at the TARGET table level.
-Once a value is at the target table level it is no longer a child-table column.
-You CANNOT feed a PU_* result as the value argument of another PU_* that shares the same target table.
-```pql
--- WRONG:
-PU_AVG( "CASES", PU_FIRST( "CASES", "ACTIVITIES"."TIMESTAMP" ) )
-
--- CORRECT: PU_FIRST already IS a case-level value. Use it directly:
-PU_FIRST( "CASES", "ACTIVITIES"."TIMESTAMP", ORDER BY ( "ACTIVITIES"."TIMESTAMP" ASC ) )
-
--- Valid nesting: different target tables (3-level hierarchy)
-PU_SUM( "VENDORS", PU_SUM( "ORDERS", "LINE_ITEMS"."AMOUNT" ) )
--- ✓ outer target="VENDORS" (vendor level), inner target="ORDERS" (order level) — different levels, OK.
+-- CORRECT — average cycle time:
+AVG( DATEDIFF('dd', PU_FIRST("CASES","ACTIVITIES"."TIMESTAMP", ORDER BY ("ACTIVITIES"."TIMESTAMP" ASC)), PU_LAST("CASES","ACTIVITIES"."TIMESTAMP", ORDER BY ("ACTIVITIES"."TIMESTAMP" ASC))) )
 ```
 """
 
 _EXPERT_FRAMEWORK = """
 ## Expert Query Construction Framework
 
-**Step 1 — Tables & joins**
-What is the case/base table? What child tables? Join direction: 1:N or N:1?
-
-**Step 2 — Result level**
-Case level or activity level? Mixing levels → GLOBAL() required.
-
-**Step 3 — Filters first**
-FILTER for simple conditions. BIND_FILTERS for non-common tables.
-
-**Step 4 — Compose KPIs**
-Build innermost aggregation first. Wrap with GLOBAL() at table boundaries.
-
-**Step 5 — Performance check**
-PU_COUNT vs PU_COUNT_DISTINCT · AVG vs MEDIAN · PU filter arg vs FILTER_TO_NULL
-
-**Step 6 — Final query**
-Write in pql block. Explain each section. Flag NULL handling.
+**Step 1** — Tables & joins. What is parent? What is child?
+**Step 2** — Result level. Case or activity? Mixing → GLOBAL() required.
+**Step 3** — Filters. FILTER for simple, BIND_FILTERS for non-common tables.
+**Step 4** — Build KPIs innermost first, wrap with GLOBAL() at boundaries.
+**Step 5** — Performance: PU_COUNT vs PU_COUNT_DISTINCT, AVG vs MEDIAN.
 
 ## Anti-patterns — always avoid
 1. Missing GLOBAL() when mixing case + activity columns
@@ -988,20 +728,12 @@ Write in pql block. Explain each section. Flag NULL handling.
 3. PU_COUNT_DISTINCT on key column
 4. MEDIAN when AVG is sufficient
 5. Missing double-quotes on table/column names
-6. Single-quoting column names
-7. ANY SQL syntax (SELECT/FROM/JOIN/GROUP BY)
-8. **CRITICAL — Wrapping PU_FIRST/PU_LAST inside another PU function with the SAME target table.**
-   PU_FIRST("CASES", ...) and PU_LAST("CASES", ...) already return case-level scalars.
-   Using PU_AVG("CASES", DATEDIFF(..., PU_FIRST("CASES",...), PU_LAST("CASES",...))) is WRONG.
-   The outer PU has nothing to aggregate — both inner values are already at "CASES" level.
-   CORRECT: DATEDIFF('dd', PU_FIRST("CASES",...), PU_LAST("CASES",...)) — no outer PU needed.
-   To get an overall average: AVG( DATEDIFF(...) ) — standard aggregation, not PU.
+6. ANY SQL syntax (SELECT/FROM/JOIN/GROUP BY)
+7. Outer PU wrapping DATEDIFF of PU_FIRST/PU_LAST with same target table
 """
 
 
 def build_system_prompt(complexity: str, show_reasoning: bool) -> str:
-    # Only embed the most critical "always-needed" functions (not the full 230)
-    # Full function docs are injected dynamically per-query via build_function_context()
     ALWAYS_INCLUDE = [
         'GLOBAL', 'CALC_THROUGHPUT', 'PU_COUNT', 'PU_SUM', 'PU_AVG',
         'PU_FIRST', 'PU_LAST', 'FILTER', 'DATEDIFF', 'REMAP_TIMESTAMPS',
@@ -1022,18 +754,13 @@ Write ACCURATE, OPTIMIZED, PRODUCTION-READY PQL queries.
 - Multiple FILTER statements merge by logical AND
 - NULL: most functions skip NULLs; use COALESCE or ISNULL to handle explicitly
 - PU-functions aggregate FROM child table (many-side) TO parent table (one-side)
-- Standard tables: "CASES"."CASE_ID", "ACTIVITIES"."ACTIVITY", "ACTIVITIES"."TIMESTAMP"
 
 {_SQL_PROHIBITION}
 
 {_FUNCTION_SELECTION_GUIDE}
 
-## Core PQL Functions (always available)
+## Core PQL Functions
 {core_refs}
-
-## Note
-Additional relevant function docs are injected dynamically based on the user query.
-The full library has 230 functions — only relevant ones are shown per query.
 """
 
     if complexity in ("Advanced", "Expert"):
@@ -1045,17 +772,17 @@ The full library has 230 functions — only relevant ones are shown per query.
     if show_reasoning and complexity in ("Advanced", "Expert"):
         base += """
 ## Response Format
-1. **Analysis** — identify tables, joins, and which function(s) the selection guide points to
+1. **Analysis** — identify tables, joins, function selection
 2. **Query** — complete PQL in a ```pql code block
-3. **Explanation** — explain each part of the query
-4. **Performance notes** — optimization choices (e.g. why PU_COUNT over PU_COUNT_DISTINCT)
+3. **Explanation** — explain each part
+4. **Performance notes** — optimization choices
 5. **Edge cases** — NULL handling, filter propagation, GLOBAL() requirement
 """
     elif complexity == "Intermediate":
         base += """
 ## Response Format
 1. PQL in a ```pql code block
-2. Explain each function used and why it was chosen
+2. Explain each function used and why
 3. Mention important gotchas (NULL, GLOBAL, filter awareness)
 """
     else:
@@ -1066,21 +793,17 @@ The full library has 230 functions — only relevant ones are shown per query.
 """
 
     instructions = {
-        "Basic": "Simple queries. Use one or two functions maximum. Clear placeholder table names.\n",
+        "Basic": "Simple queries. Use one or two functions maximum.\n",
         "Intermediate": "Queries may contain 2–5 functions. Use filters, CASE WHEN logic, and simple aggregations.\n",
         "Advanced": "Use nested functions, GLOBAL(), and PU aggregations. Always explain why GLOBAL() is required.\n",
         "Expert": "Write production-ready Celonis PQL with multi-KPI queries, nested PU, throughput, rework, and automation rate.\n",
     }
 
     base += f"\n## Complexity: {complexity}\n{instructions[complexity]}\n"
-
     base += """
 When table/column names are unknown use:
-"CASES"."CASE_ID"
-"ACTIVITIES"."ACTIVITY"
-"ACTIVITIES"."TIMESTAMP"
-"ORDERS"."AMOUNT"
-"VENDORS"."VENDOR_ID"
+"CASES"."CASE_ID", "ACTIVITIES"."ACTIVITY", "ACTIVITIES"."TIMESTAMP",
+"ORDERS"."AMOUNT", "VENDORS"."VENDOR_ID"
 """
     return base
 
@@ -1102,21 +825,12 @@ Your ONLY job: review PQL code and fix any errors. Return the corrected query.
 7. PU_COUNT_DISTINCT on a key column → replace with PU_COUNT
 8. FILTER_TO_NULL inside PU functions → replace with PU filter argument
 9. PU-function direction: target_table is the PARENT (1-side), source is CHILD (N-side)
-10. MEDIAN used when AVG would work → add a comment noting performance cost
-11. CRITICAL — Outer PU wrapping DATEDIFF of inner PU with same target table is WRONG.
-    Example of the ERROR:
-      PU_AVG( "CASES", DATEDIFF( 'dd', PU_FIRST( "CASES", ... ), PU_LAST( "CASES", ... ) ) )
-    WHY it's wrong: PU_FIRST("CASES",...) already returns a scalar at the CASES level.
-    Passing it as the value-arg of PU_AVG("CASES",...) means the outer PU has no child rows
-    to aggregate over — both inner values are already case-level scalars.
-    FIX: Remove outer PU. Use DATEDIFF directly:
-      DATEDIFF( 'dd', PU_FIRST( "CASES", ... ), PU_LAST( "CASES", ... ) )
-    For an overall average: AVG( DATEDIFF(...) )  ← standard aggregation, NOT PU_AVG.
-    Valid nesting is ONLY when outer and inner PU have DIFFERENT target tables (3-level hierarchy).
+10. CRITICAL — Outer PU wrapping DATEDIFF of inner PU with same target table is WRONG.
+    FIX: Remove outer PU. Use DATEDIFF directly or AVG( DATEDIFF(...) ) for averages.
 
 ## Response format:
 - If the query is correct: respond with exactly: VALID
-- If the query has errors: respond with only the corrected ```pql code block and a brief bullet list of what was fixed. Nothing else.
+- If errors exist: respond with only the corrected ```pql block and brief bullet list of fixes.
 """
 
 # ──────────────────────────────────────────────────────────────
@@ -1170,54 +884,436 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-.stApp { background:#0a0c10; }
-.main .block-container { background:#0a0c10 !important; padding-top:2rem !important; }
-header[data-testid="stHeader"] { background:#0a0c10 !important; border-bottom:1px solid #1e2531 !important; }
-.stApp > header { background:#0a0c10 !important; }
-[data-testid="stToolbar"] { background:#0a0c10 !important; }
-h1, h2, h3, h1 *, h2 *, h3 * { color:#f1f5f9 !important; }
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Syne:wght@400;600;700;800&family=Inter:wght@300;400;500&display=swap');
+
+/* ── Global Reset ── */
+*, *::before, *::after { box-sizing: border-box; }
+
+:root {
+  --bg-base:        #07090f;
+  --bg-surface:     #0d1018;
+  --bg-elevated:    #131720;
+  --bg-hover:       #1a2030;
+  --border:         #1f2738;
+  --border-bright:  #2a3550;
+  --accent:         #3b82f6;
+  --accent-dim:     #1e3a5f;
+  --accent-glow:    rgba(59,130,246,0.15);
+  --amber:          #f59e0b;
+  --amber-dim:      #451a03;
+  --green:          #10b981;
+  --green-dim:      #052e16;
+  --red:            #ef4444;
+  --text-primary:   #e8edf5;
+  --text-secondary: #8899b0;
+  --text-muted:     #4a5568;
+  --font-mono:      'IBM Plex Mono', monospace;
+  --font-ui:        'Syne', sans-serif;
+  --font-body:      'Inter', sans-serif;
+  --radius-sm:      6px;
+  --radius-md:      10px;
+  --radius-lg:      16px;
+}
+
+/* ── Base ── */
+.stApp { background: var(--bg-base) !important; font-family: var(--font-body); }
+.main .block-container {
+  background: var(--bg-base) !important;
+  padding-top: 2rem !important;
+  max-width: 900px !important;
+}
+header[data-testid="stHeader"] {
+  background: var(--bg-base) !important;
+  border-bottom: 1px solid var(--border) !important;
+}
+[data-testid="stToolbar"] { background: var(--bg-base) !important; }
+
+/* ── Typography ── */
+h1, h2, h3 {
+  font-family: var(--font-ui) !important;
+  color: var(--text-primary) !important;
+  letter-spacing: -0.02em;
+}
+h1 { font-size: 1.75rem !important; font-weight: 800 !important; }
+h2 { font-size: 1.25rem !important; font-weight: 700 !important; }
+h3 { font-size: 1rem !important; font-weight: 600 !important; }
 [data-testid="stHeadingWithActionElements"] h1,
 [data-testid="stHeadingWithActionElements"] h2,
-[data-testid="stHeadingWithActionElements"] h3 { color:#f1f5f9 !important; }
-div[data-testid="stMarkdownContainer"] h1,
-div[data-testid="stMarkdownContainer"] h2,
-div[data-testid="stMarkdownContainer"] h3 { color:#f1f5f9 !important; }
-[data-testid="stCaptionContainer"] p, .stCaption, .stCaption p { color:#64748b !important; font-size:13px !important; }
-div[data-testid="stMarkdownContainer"] p { color:#cbd5e1 !important; }
-h1 a, h2 a, h3 a { display:none !important; }
-[data-testid="stHeadingWithActionElements"] a { display:none !important; }
+[data-testid="stHeadingWithActionElements"] h3 { color: var(--text-primary) !important; }
+div[data-testid="stMarkdownContainer"] p { color: var(--text-secondary) !important; font-size: 14px; line-height: 1.6; }
+[data-testid="stCaptionContainer"] p, .stCaption, .stCaption p {
+  color: var(--text-muted) !important;
+  font-size: 12px !important;
+  font-family: var(--font-mono) !important;
+}
+h1 a, h2 a, h3 a,
+[data-testid="stHeadingWithActionElements"] a,
 [data-testid="stHeadingWithActionElements"] button,
-[data-testid="stHeadingWithActionElements"] svg { display:none !important; }
-[data-testid="stSidebar"] { background:#0d1117; border-right:1px solid #1e2531; }
+[data-testid="stHeadingWithActionElements"] svg { display: none !important; }
+
+/* ── Sidebar ── */
+[data-testid="stSidebar"] {
+  background: var(--bg-surface) !important;
+  border-right: 1px solid var(--border) !important;
+}
 [data-testid="stSidebar"] label,
 [data-testid="stSidebar"] p,
-[data-testid="stSidebar"] span { color:#94a3b8 !important; }
+[data-testid="stSidebar"] span { color: var(--text-secondary) !important; font-size: 13px; }
 [data-testid="stSidebar"] input,
-[data-testid="stSidebar"] select { background:#161b22 !important; border:1px solid #30363d !important; color:#e2e8f0 !important; border-radius:6px !important; }
-[data-testid="stChatMessage"] { background:#0d1117 !important; border:1px solid #1e2531; border-radius:12px !important; margin-bottom:10px; box-shadow:0 4px 14px rgba(0,0,0,0.35); }
+[data-testid="stSidebar"] select {
+  background: var(--bg-elevated) !important;
+  border: 1px solid var(--border-bright) !important;
+  color: var(--text-primary) !important;
+  border-radius: var(--radius-sm) !important;
+  font-family: var(--font-mono) !important;
+  font-size: 12px !important;
+}
+[data-testid="stSidebar"] .stTextInput input:focus {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 2px var(--accent-glow) !important;
+}
+[data-testid="stSidebar"] hr { border-color: var(--border) !important; }
+
+/* ── Chat Messages ── */
+[data-testid="stChatMessage"] {
+  background: var(--bg-surface) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius-lg) !important;
+  margin-bottom: 12px !important;
+  transition: border-color 0.2s ease;
+}
+[data-testid="stChatMessage"]:hover { border-color: var(--border-bright) !important; }
 [data-testid="stChatMessageContent"],
 [data-testid="stChatMessageContent"] p,
 [data-testid="stChatMessageContent"] li,
-[data-testid="stChatMessageContent"] span,
-[data-testid="stChatMessageContent"] ul { color:#e2e8f0 !important; font-size:14px; }
-[data-testid="stChatMessageContent"] strong { color:#f8fafc !important; }
-[data-testid="stBottom"] { background:#0a0c10 !important; border-top:1px solid #1e2531 !important; }
-[data-testid="stBottom"] > div { background:#0a0c10 !important; }
-[data-testid="stChatInput"] { background:#161b22 !important; border:1px solid #30363d !important; border-radius:10px !important; }
-[data-testid="stChatInput"]:focus-within { border:1px solid #6366f1 !important; box-shadow:0 0 0 2px rgba(99,102,241,0.15) !important; }
-[data-testid="stChatInput"] textarea { background:#161b22 !important; color:#f1f5f9 !important; caret-color:#6366f1 !important; border:none !important; border-radius:10px !important; font-size:14px !important; }
-[data-testid="stChatInput"] textarea::placeholder { color:#475569 !important; }
-[data-testid="stChatInputSubmitButton"] button { background:linear-gradient(135deg,#6366f1,#8b5cf6) !important; border:none !important; }
-pre { background:#020617 !important; border:1px solid #1e293b !important; border-radius:10px !important; padding:14px !important; overflow-x:auto !important; }
-pre code, code { background:#020617 !important; border:1px solid #1e293b !important; border-radius:8px !important; color:#f1f5f9 !important; font-family:"JetBrains Mono", monospace !important; font-size:13px !important; line-height:1.5 !important; }
-.stButton > button { background:#161b22 !important; border:1px solid #30363d !important; color:#c7d2fe !important; border-radius:8px !important; font-size:12px !important; }
-.stButton > button:hover { background:#1e293b !important; border-color:#6366f1 !important; color:#e0e7ff !important; transform:scale(1.02); }
-details { border:1px solid #1e2531 !important; border-radius:8px !important; }
-[data-testid="stMetric"] { background:#0d1117; border:1px solid #1e2531; border-radius:10px; padding:10px 14px; }
+[data-testid="stChatMessageContent"] span {
+  color: var(--text-primary) !important;
+  font-size: 14px !important;
+  line-height: 1.7 !important;
+  font-family: var(--font-body) !important;
+}
+[data-testid="stChatMessageContent"] strong { color: #f0f4ff !important; font-weight: 600; }
+[data-testid="stChatMessageContent"] code {
+  background: var(--bg-elevated) !important;
+  color: #93c5fd !important;
+  font-family: var(--font-mono) !important;
+  font-size: 12px !important;
+  padding: 2px 6px !important;
+  border-radius: 4px !important;
+  border: 1px solid var(--border-bright) !important;
+}
 
-/* Verification badge styles */
-.verify-pass { background:#052e16; border:1px solid #16a34a; border-radius:8px; padding:8px 14px; color:#4ade80; font-size:13px; margin-top:8px; }
-.verify-fix  { background:#1c1004; border:1px solid #d97706; border-radius:8px; padding:8px 14px; color:#fbbf24; font-size:13px; margin-top:8px; }
+/* ── Code blocks ── */
+pre {
+  background: #040810 !important;
+  border: 1px solid var(--border-bright) !important;
+  border-radius: var(--radius-md) !important;
+  padding: 18px !important;
+  overflow-x: auto !important;
+  position: relative;
+}
+pre::before {
+  content: 'PQL';
+  position: absolute;
+  top: 10px; right: 14px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+pre code {
+  background: transparent !important;
+  border: none !important;
+  color: #e2e8f0 !important;
+  font-family: var(--font-mono) !important;
+  font-size: 13px !important;
+  line-height: 1.6 !important;
+  padding: 0 !important;
+}
+
+/* ── Chat Input ── */
+[data-testid="stBottom"] {
+  background: linear-gradient(to top, var(--bg-base) 70%, transparent) !important;
+  border-top: none !important;
+  padding: 16px 0 !important;
+}
+[data-testid="stBottom"] > div { background: transparent !important; }
+[data-testid="stChatInput"] {
+  background: var(--bg-elevated) !important;
+  border: 1px solid var(--border-bright) !important;
+  border-radius: var(--radius-lg) !important;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+[data-testid="stChatInput"]:focus-within {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3px var(--accent-glow), 0 4px 24px rgba(0,0,0,0.4) !important;
+}
+[data-testid="stChatInput"] textarea {
+  background: transparent !important;
+  color: var(--text-primary) !important;
+  caret-color: var(--accent) !important;
+  border: none !important;
+  font-size: 14px !important;
+  font-family: var(--font-body) !important;
+  line-height: 1.6 !important;
+}
+[data-testid="stChatInput"] textarea::placeholder { color: var(--text-muted) !important; }
+[data-testid="stChatInputSubmitButton"] button {
+  background: var(--accent) !important;
+  border: none !important;
+  border-radius: 8px !important;
+  transition: background 0.2s, transform 0.1s;
+}
+[data-testid="stChatInputSubmitButton"] button:hover {
+  background: #2563eb !important;
+  transform: scale(1.05);
+}
+
+/* ── Sidebar Buttons ── */
+.stButton > button {
+  background: var(--bg-elevated) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text-secondary) !important;
+  border-radius: var(--radius-sm) !important;
+  font-size: 12px !important;
+  font-family: var(--font-mono) !important;
+  transition: all 0.15s ease;
+  text-align: left !important;
+}
+.stButton > button:hover {
+  background: var(--bg-hover) !important;
+  border-color: var(--accent) !important;
+  color: var(--text-primary) !important;
+}
+
+/* ── Selectbox / Slider ── */
+[data-testid="stSelectbox"] > div > div {
+  background: var(--bg-elevated) !important;
+  border: 1px solid var(--border-bright) !important;
+  border-radius: var(--radius-sm) !important;
+  color: var(--text-primary) !important;
+  font-family: var(--font-mono) !important;
+  font-size: 12px !important;
+}
+[data-testid="stSlider"] > div > div > div { background: var(--border-bright) !important; }
+[data-testid="stSlider"] > div > div > div > div { background: var(--accent) !important; }
+
+/* ── Toggle ── */
+[data-testid="stToggle"] input:checked + div { background: var(--accent) !important; }
+
+/* ── Metrics ── */
+[data-testid="stMetric"] {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  text-align: center;
+}
+[data-testid="stMetricLabel"] { color: var(--text-muted) !important; font-size: 11px !important; font-family: var(--font-mono) !important; }
+[data-testid="stMetricValue"] { color: var(--text-primary) !important; font-family: var(--font-mono) !important; font-size: 1.5rem !important; font-weight: 600 !important; }
+
+/* ── Expanders ── */
+[data-testid="stExpander"] {
+  background: var(--bg-elevated) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius-sm) !important;
+  margin-bottom: 4px !important;
+}
+[data-testid="stExpander"]:hover { border-color: var(--border-bright) !important; }
+[data-testid="stExpander"] summary {
+  font-family: var(--font-mono) !important;
+  font-size: 12px !important;
+  color: var(--text-secondary) !important;
+  padding: 8px 12px !important;
+}
+details { border: 1px solid var(--border) !important; border-radius: var(--radius-sm) !important; }
+
+/* ── Warning/Info ── */
+[data-testid="stAlert"] {
+  background: var(--bg-elevated) !important;
+  border: 1px solid var(--border-bright) !important;
+  border-radius: var(--radius-md) !important;
+  color: var(--text-primary) !important;
+}
+
+/* ── Verification Badges ── */
+.verify-pass {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--green-dim);
+  border: 1px solid var(--green);
+  border-radius: var(--radius-sm);
+  padding: 8px 14px;
+  color: #6ee7b7;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  margin-top: 10px;
+  letter-spacing: 0.02em;
+}
+.verify-fix {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--amber-dim);
+  border: 1px solid var(--amber);
+  border-radius: var(--radius-sm);
+  padding: 8px 14px;
+  color: #fcd34d;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  margin-top: 10px;
+  letter-spacing: 0.02em;
+}
+
+/* ── Header Brand ── */
+.brand-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.brand-icon {
+  width: 38px; height: 38px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #1d4ed8, #7c3aed);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px;
+  box-shadow: 0 0 16px rgba(99,102,241,0.3);
+  flex-shrink: 0;
+}
+.brand-title {
+  font-family: var(--font-ui) !important;
+  font-size: 15px !important;
+  font-weight: 800 !important;
+  color: var(--text-primary) !important;
+  line-height: 1.2;
+}
+.brand-sub {
+  font-family: var(--font-mono) !important;
+  font-size: 10px !important;
+  color: var(--text-muted) !important;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+
+/* ── Stat pills ── */
+.stat-pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 3px 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-right: 6px;
+}
+.stat-pill b { color: var(--text-primary); }
+
+/* ── Section label ── */
+.sidebar-section {
+  font-family: var(--font-mono) !important;
+  font-size: 10px !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.1em !important;
+  color: var(--text-muted) !important;
+  margin: 14px 0 6px !important;
+}
+
+/* ── Page title area ── */
+.page-title {
+  font-family: var(--font-ui);
+  font-size: 2rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  letter-spacing: -0.03em;
+  margin-bottom: 4px;
+}
+.page-title span { color: var(--accent); }
+.page-meta {
+  display: flex; gap: 0; align-items: center;
+  margin-bottom: 24px;
+}
+
+/* ── Welcome card ── */
+.welcome-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-bright);
+  border-radius: var(--radius-lg);
+  padding: 24px 28px;
+  margin-bottom: 8px;
+  position: relative;
+  overflow: hidden;
+}
+.welcome-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #3b82f6, #8b5cf6, #ec4899);
+}
+.welcome-title {
+  font-family: var(--font-ui);
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+.welcome-sub {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 18px;
+  line-height: 1.5;
+}
+.welcome-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+.welcome-item {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+.welcome-item b { color: var(--text-primary); display: block; margin-bottom: 2px; }
+.welcome-examples {
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+  margin-top: 4px;
+}
+.welcome-examples p {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.example-chip {
+  display: inline-block;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 4px 12px;
+  font-size: 12px;
+  color: #93c5fd;
+  font-family: var(--font-mono);
+  margin: 3px 3px 3px 0;
+  cursor: default;
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-base); }
+::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #3a4a6a; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -1259,29 +1355,24 @@ client, _api_key = get_client()
 
 with st.sidebar:
     st.markdown(
-        '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">'
-        '<div style="width:36px;height:36px;border-radius:9px;'
-        'background:linear-gradient(135deg,#6366f1,#8b5cf6);'
-        'display:flex;align-items:center;justify-content:center;font-size:18px;">⚡</div>'
-        '<div><div style="font-size:15px;font-weight:700;color:#f1f5f9;">PQL Assistant</div>'
-        '<div style="font-size:11px;color:#475569;">230 functions · auto-verified</div></div></div>',
+        '<div class="brand-header">'
+        '<div class="brand-icon">⚡</div>'
+        '<div>'
+        '<div class="brand-title">PQL Assistant</div>'
+        '<div class="brand-sub">230 functions · auto-verified</div>'
+        '</div></div>',
         unsafe_allow_html=True,
     )
 
-    st.divider()
-
-    st.markdown('**🤖 Model**')
+    st.markdown('<div class="sidebar-section">Model</div>', unsafe_allow_html=True)
     selected_model = st.selectbox(
         'Model', options=list(GROQ_MODELS.keys()),
         index=list(GROQ_MODELS.keys()).index(st.session_state.model_id),
         format_func=lambda k: GROQ_MODELS[k], label_visibility='collapsed',
     )
     st.session_state.model_id = selected_model
-    st.caption(f'`{selected_model}`')
 
-    st.divider()
-
-    st.markdown('**🎛 Complexity**')
+    st.markdown('<div class="sidebar-section">Complexity</div>', unsafe_allow_html=True)
     complexity = st.select_slider(
         'Complexity', options=['Basic', 'Intermediate', 'Advanced', 'Expert'],
         value=st.session_state.complexity, label_visibility='collapsed',
@@ -1294,17 +1385,13 @@ with st.sidebar:
         help='AI explains planning steps before writing the query',
     )
 
-    st.divider()
-
-    st.markdown('**💡 Quick examples**')
+    st.markdown('<div class="sidebar-section">Quick examples</div>', unsafe_allow_html=True)
     for ex in EXAMPLE_PROMPTS.get(complexity, EXAMPLE_PROMPTS['Advanced']):
         if st.button(f'→ {ex}', key=f'ex_{ex}', use_container_width=True):
             st.session_state['_pending'] = ex
 
-    st.divider()
-
-    st.markdown('**📚 Function Reference**')
-    search = st.text_input('Search functions', placeholder='e.g. PU_COUNT, DATEDIFF…', label_visibility='collapsed')
+    st.markdown('<div class="sidebar-section">Function reference</div>', unsafe_allow_html=True)
+    search = st.text_input('Search', placeholder='Search 230 functions…', label_visibility='collapsed')
 
     for cat, funcs in PANEL_DATA.items():
         hits = [f for f in funcs
@@ -1320,16 +1407,16 @@ with st.sidebar:
                     st.session_state['_pending'] = (
                         f'Write a PQL query using {fn["name"]} and explain the syntax with a practical example.'
                     )
-                st.caption(fn['doc'][:120] + '…' if len(fn['doc']) > 120 else fn['doc'])
+                st.caption(fn['doc'][:110] + '…' if len(fn['doc']) > 110 else fn['doc'])
 
     st.divider()
 
     c1, c2, c3 = st.columns(3)
     c1.metric('Queries', st.session_state.total_queries)
-    c2.metric('✅ Valid', st.session_state.verified_count)
-    c3.metric('🔧 Fixed', st.session_state.fixed_count)
+    c2.metric('✅', st.session_state.verified_count)
+    c3.metric('🔧', st.session_state.fixed_count)
 
-    if st.button('🗑 Clear chat', use_container_width=True):
+    if st.button('Clear chat', use_container_width=True):
         st.session_state.messages = []
         st.rerun()
 
@@ -1337,10 +1424,21 @@ with st.sidebar:
 #  SECTION 9 · MAIN CHAT AREA
 # ──────────────────────────────────────────────────────────────
 
-st.markdown('## ⚡ PQL Query Assistant')
-st.caption(
-    f'Complexity: **{complexity}** · Model: `{st.session_state.model_id}` · '
-    f'{len(COMPACT_REFS)} functions · 🔍 auto-verified'
+# Page title
+st.markdown(
+    '<div class="page-title">PQL Query <span>Assistant</span></div>',
+    unsafe_allow_html=True
+)
+
+# Meta pills
+st.markdown(
+    f'<div class="page-meta">'
+    f'<span class="stat-pill"><b>{complexity}</b></span>'
+    f'<span class="stat-pill"><b>{st.session_state.model_id.split("-")[0]}</b></span>'
+    f'<span class="stat-pill"><b>{len(COMPACT_REFS)}</b> functions</span>'
+    f'<span class="stat-pill">🔍 auto-verified</span>'
+    f'</div>',
+    unsafe_allow_html=True
 )
 
 if not _api_key:
@@ -1358,96 +1456,76 @@ for msg in st.session_state.messages:
 
 if not st.session_state.messages:
     with st.chat_message('assistant', avatar='⚡'):
-        st.markdown("""
-**Welcome! I'm your PQL Query Assistant.**
-
-Every query I generate is automatically **verified and corrected** by a second AI pass before you see it — so you always get valid PQL.
-
-**What I can do:**
-- 🔨 **Write** PQL from a plain-English description
-- 🔍 **Explain** existing PQL line by line
-- ⚡ **Optimize** slow or incorrect queries
-- 📚 **Teach** any of the 230 PQL functions with examples
-- ✅ **Auto-verify** every generated query for correctness
-
-**Try asking:**
-- *"Calculate average throughput time per case in days"*
-- *"How do I use PU_COUNT with a filter condition?"*
-- *"Detect rework loops where the same activity repeats more than twice"*
-
-→ Use the sidebar to change complexity or browse all 230 functions.
-""")
+        st.markdown(
+            '<div class="welcome-card">'
+            '<div class="welcome-title">Welcome to PQL Query Assistant</div>'
+            '<div class="welcome-sub">Every query is automatically <strong>verified and corrected</strong> by a second AI pass before you see it.</div>'
+            '<div class="welcome-grid">'
+            '<div class="welcome-item"><b>✍ Write</b>PQL from plain English</div>'
+            '<div class="welcome-item"><b>🔍 Explain</b>Any PQL line by line</div>'
+            '<div class="welcome-item"><b>⚡ Optimize</b>Slow or incorrect queries</div>'
+            '<div class="welcome-item"><b>📚 Teach</b>All 230 functions with examples</div>'
+            '</div>'
+            '<div class="welcome-examples">'
+            '<p>Try asking</p>'
+            '<span class="example-chip">Avg throughput time per case</span>'
+            '<span class="example-chip">How to use PU_COUNT with filter</span>'
+            '<span class="example-chip">Detect rework loops</span>'
+            '</div>'
+            '</div>',
+            unsafe_allow_html=True
+        )
 
 # ──────────────────────────────────────────────────────────────
 #  SECTION 10 · VERIFICATION ENGINE (two-pass)
 # ──────────────────────────────────────────────────────────────
 
 def extract_pql_blocks(text: str) -> list[str]:
-    """Extract all PQL code blocks from a response."""
     return re.findall(r"```pql\s*(.*?)```", text, re.S)
 
 
 def verify_and_fix_pql(pql_query: str) -> tuple[bool, str, list[str]]:
-    """
-    Two-pass verification:
-    Pass 1 — fast rule-based checks (no LLM call needed if clean)
-    Pass 2 — LLM review + correction (only if Pass 1 finds issues OR for Advanced/Expert)
-
-    Returns: (was_modified, final_query, list_of_issues)
-    """
     issues = []
 
-    # ── Pass 1: Rule-based checks ──────────────────────────────
     SQL_KEYWORDS = [r'\bSELECT\b', r'\bFROM\b', r'\bJOIN\b', r'\bGROUP BY\b',
                     r'\bHAVING\b', r'\bOVER\s*\(', r'\bAS\s+\w+\s*(?:,|\n|$)']
     for kw in SQL_KEYWORDS:
         if re.search(kw, pql_query, re.IGNORECASE):
             issues.append(f"Contains SQL keyword: `{kw.strip()}`")
 
-    # Unquoted table.column references
     unquoted = re.findall(r'(?<!")\b([A-Z][A-Z0-9_]+)\.([A-Z][A-Z0-9_]+)\b(?!")', pql_query)
     if unquoted:
         issues.append(f"Possible unquoted identifiers: {unquoted[:3]}")
 
-    # PU function with wrong arg count
     pu_calls = re.findall(r'(PU_\w+)\s*\(([^)]*)\)', pql_query)
     for fn_name, args in pu_calls:
         arg_count = len([a for a in args.split(',') if a.strip()])
         if arg_count < 2:
             issues.append(f"{fn_name} needs at least 2 arguments (target_table, source_col)")
 
-    # CALC_THROUGHPUT without GLOBAL
     if 'CALC_THROUGHPUT' in pql_query and 'GLOBAL(' not in pql_query:
         if re.search(r'\b(AVG|COUNT|SUM|MEDIAN)\b', pql_query):
             issues.append("CALC_THROUGHPUT mixed with other aggregations — consider GLOBAL()")
 
-    # FILTER_TO_NULL inside PU
     if 'FILTER_TO_NULL' in pql_query and 'PU_' in pql_query:
         issues.append("FILTER_TO_NULL inside PU function — use PU filter argument instead")
 
-    # CRITICAL: Outer PU wrapping DATEDIFF of inner PU with same target table
-    # Pattern: PU_xxx( "TABLE", DATEDIFF( ..., PU_yyy( "TABLE", ... ), PU_zzz( "TABLE", ... ) ) )
-    # Detect: outer PU whose value arg contains inner PU calls with the same quoted table
     outer_pu_match = re.search(
         r'PU_\w+\s*\(\s*("[\w]+")\s*,\s*(?:DATEDIFF|HOURS_BETWEEN|MINUTES_BETWEEN|SECONDS_BETWEEN|MILLIS_BETWEEN|WORKDAYS_BETWEEN)',
         pql_query, re.IGNORECASE
     )
     if outer_pu_match:
         outer_table = outer_pu_match.group(1)
-        # Check if any inner PU uses the same target table
         inner_pu_same = re.search(
             r'PU_(?:FIRST|LAST|MIN|MAX|AVG|SUM|COUNT)\s*\(\s*' + re.escape(outer_table),
             pql_query, re.IGNORECASE
         )
         if inner_pu_same:
             issues.append(
-                f"CRITICAL: Outer PU function wraps DATEDIFF of inner PU_FIRST/PU_LAST with same "
-                f"target table {outer_table}. PU_FIRST/PU_LAST already return case-level scalars — "
-                f"remove the outer PU and use DATEDIFF(..., PU_FIRST(...), PU_LAST(...)) directly. "
-                f"For an overall average, wrap with AVG(...), not PU_AVG(...)."
+                f"CRITICAL: Outer PU wraps DATEDIFF of inner PU with same target {outer_table}. "
+                f"Use DATEDIFF(..., PU_FIRST(...), PU_LAST(...)) directly."
             )
 
-    # ── Pass 2: LLM review (always runs for Advanced/Expert, or when issues found) ──
     always_verify = st.session_state.complexity in ('Advanced', 'Expert')
 
     if not issues and not always_verify:
@@ -1463,11 +1541,11 @@ def verify_and_fix_pql(pql_query: str) -> tuple[bool, str, list[str]]:
 {f"Rule-based checks flagged: {issues}" if issues else "Do a thorough correctness review."}
 
 Respond with either:
-- Exactly the word VALID (if the query is correct)
-- Or a corrected ```pql block followed by a brief bullet list of what was fixed
+- Exactly the word VALID (if correct)
+- Or a corrected ```pql block followed by a brief bullet list of fixes
 """
         response = client.chat.completions.create(
-            model="llama-3.1-8b-instant",  # pinned: fast & cheap, never uses user's model
+            model="llama-3.1-8b-instant",
             messages=[
                 {"role": "system", "content": VERIFICATION_SYSTEM},
                 {"role": "user", "content": verify_prompt},
@@ -1480,11 +1558,9 @@ Respond with either:
         if result.upper().startswith("VALID"):
             return False, pql_query, []
 
-        # Extract corrected query
         match = re.search(r"```pql\s*(.*?)```", result, re.S)
         if match:
             corrected = match.group(1).strip()
-            # Extract bullet fixes
             fixes = re.findall(r'^[-•*]\s+(.+)', result, re.MULTILINE)
             return True, corrected, fixes if fixes else ["Query corrected by verification pass"]
 
@@ -1535,7 +1611,6 @@ def stream_groq(prompt_override=None):
             placeholder.markdown(full)
             st.session_state.total_queries += 1
 
-            # ── Two-pass verification ──────────────────────────
             pql_blocks = extract_pql_blocks(full)
 
             if pql_blocks:
@@ -1552,7 +1627,6 @@ def stream_groq(prompt_override=None):
                             st.caption(f"  • {note}")
                         st.markdown("**Corrected query:**")
                         st.code(final_query, language="sql")
-                        # Update stored message with corrected version
                         full = full.replace(
                             f"```pql\n{pql_block}\n```",
                             f"```pql\n{final_query}\n```"
@@ -1580,7 +1654,7 @@ if '_pending' in st.session_state:
     st.rerun()
 
 # Main input
-if prompt := st.chat_input('Describe your query, ask about a function, or paste PQL to optimize…'):
+if prompt := st.chat_input('Describe your PQL query, ask about a function, or paste code to optimize…'):
     st.session_state.messages.append({'role': 'user', 'content': prompt})
     with st.chat_message('user', avatar='🧑'):
         st.markdown(prompt)
