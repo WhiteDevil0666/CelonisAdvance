@@ -21,7 +21,7 @@ import streamlit as st
 from groq import Groq
 
 # ──────────────────────────────────────────────────────────────
-#  SECTION 1 · KNOWLEDGE BASE  (175 PQL functions + categories)
+#  SECTION 1 · KNOWLEDGE BASE  (230 PQL functions + categories)
 # ──────────────────────────────────────────────────────────────
 
 COMPACT_REFS = {
@@ -342,6 +342,103 @@ Units: DAYS | HOURS | MINUTES | SECONDS | MILLISECONDS
     'EXCLUSIVE_CHOICE': 'Models XOR gateway in BPMN_CONFORMS.',
     'ALLOW': 'Allows deviations in BPMN_CONFORMS. Syntax: ALLOW( BPMN_MATCH_UNDESIRED(ANY) )',
     'COUNT': 'Counts non-NULL rows. Syntax: COUNT(table.column). Often wrapped with GLOBAL() when mixing table levels.',
+
+    # ── Standard aggregation (missing) ──────────────────────────
+    'AVG': 'Standard average aggregation per group. Syntax: AVG( table.column ) Returns FLOAT. Respects global filters (unlike PU_AVG).',
+    'SUM': 'Standard sum aggregation per group. Syntax: SUM( table.column ) Respects global filters (unlike PU_SUM).',
+    'MAX': 'Standard maximum per group. Syntax: MAX( table.column )',
+    'MIN': 'Standard minimum per group. Syntax: MIN( table.column )',
+    'STDEV': 'Standard deviation (n-1 method) per group. Syntax: STDEV( table.column )',
+    'VAR': 'Variance (n-1 method) per group. Syntax: VAR( table.column )',
+    'TRIMMED_MEAN': 'Trimmed mean per group excluding outliers. Syntax: TRIMMED_MEAN( table.column [, lower_cutoff [, upper_cutoff]] )',
+    'COUNT_DISTINCT': 'Distinct count per group. Syntax: COUNT_DISTINCT( table.column ) Use COUNT when column is already a key.',
+
+    # ── Window / Moving aggregation (all missing) ─────────────
+    'MOVING_AVG': 'Moving average over ordered rows within partition. Syntax: MOVING_AVG( table.col, lower_bound, upper_bound [, ORDER BY ...] [, PARTITION BY ...] )',
+    'MOVING_SUM': 'Moving sum over a window of rows. Syntax: MOVING_SUM( table.col, lower_bound, upper_bound [, ORDER BY ...] [, PARTITION BY ...] )',
+    'MOVING_COUNT': 'Moving count over a window of rows. Syntax: MOVING_COUNT( table.col, lower_bound, upper_bound [, ORDER BY ...] [, PARTITION BY ...] )',
+    'MOVING_COUNT_DISTINCT': 'Moving distinct count. Syntax: MOVING_COUNT_DISTINCT( table.col, lower_bound, upper_bound [, ORDER BY ...] [, PARTITION BY ...] )',
+    'MOVING_MAX': 'Moving maximum over a window. Syntax: MOVING_MAX( table.col, lower_bound, upper_bound [, ORDER BY ...] [, PARTITION BY ...] )',
+    'MOVING_MIN': 'Moving minimum over a window. Syntax: MOVING_MIN( table.col, lower_bound, upper_bound [, ORDER BY ...] [, PARTITION BY ...] )',
+    'MOVING_MEDIAN': 'Moving median over a window. Expensive — requires sorting. Syntax: MOVING_MEDIAN( table.col, lower_bound, upper_bound [, ORDER BY ...] [, PARTITION BY ...] )',
+    'MOVING_STDEV': 'Moving standard deviation. Syntax: MOVING_STDEV( table.col, lower_bound, upper_bound [, ORDER BY ...] [, PARTITION BY ...] )',
+    'MOVING_TRIMMED_MEAN': 'Moving trimmed mean. Syntax: MOVING_TRIMMED_MEAN( table.col, lower_bound, upper_bound [, lower_cutoff, upper_cutoff] [, ORDER BY ...] [, PARTITION BY ...] )',
+    'MOVING_VAR': 'Moving variance. Syntax: MOVING_VAR( table.col, lower_bound, upper_bound [, ORDER BY ...] [, PARTITION BY ...] )',
+    'RUNNING_TOTAL': 'Cumulative running total (alias of RUNNING_SUM in older PQL versions). Syntax: RUNNING_TOTAL( table.col [, ORDER BY ...] [, PARTITION BY ...] )',
+
+    # ── DateTime difference (missing) ────────────────────────────
+    'DATE_BETWEEN': 'Difference between two dates in days (integer). Syntax: DATE_BETWEEN( table.date1, table.date2 ) Returns INT.',
+    'DAYS_BETWEEN': 'Difference in days (float). Syntax: DAYS_BETWEEN( table.date1, table.date2 [, calendar] )',
+    'MONTHS_BETWEEN': 'Difference in months. Syntax: MONTHS_BETWEEN( table.date1, table.date2 )',
+    'YEARS_BETWEEN': 'Difference in years. Syntax: YEARS_BETWEEN( table.date1, table.date2 )',
+
+    # ── DateTime modification (missing) ──────────────────────────
+    'ADD_MONTHS': 'Adds months to a date. Syntax: ADD_MONTHS( table.date_col, table.months_col )',
+    'ADD_YEARS': 'Adds years to a date. Syntax: ADD_YEARS( table.date_col, table.years_col )',
+
+    # ── DateTime projection (missing) ────────────────────────────
+    'CALENDAR_WEEK': 'Returns the calendar week number (1-53) of a date. Syntax: CALENDAR_WEEK( table.date_col )',
+    'DAY': 'Returns the day of month (1-31) from a date. Syntax: DAY( table.date_col )',
+    'DAY_OF_WEEK': 'Returns day of week (1=Monday … 7=Sunday). Syntax: DAY_OF_WEEK( table.date_col )',
+    'MONTH': 'Returns the month number (1-12) from a date. Syntax: MONTH( table.date_col )',
+    'QUARTER': 'Returns the quarter (1-4) from a date. Syntax: QUARTER( table.date_col )',
+    'YEAR': 'Returns the 4-digit year from a date. Syntax: YEAR( table.date_col )',
+    'HOURS': 'Returns the hour component (0-23) of a timestamp. Syntax: HOURS( table.timestamp_col )',
+    'MINUTES': 'Returns the minute component (0-59). Syntax: MINUTES( table.timestamp_col )',
+    'SECONDS': 'Returns the seconds component (0-59). Syntax: SECONDS( table.timestamp_col )',
+    'MILLIS': 'Returns the milliseconds component. Syntax: MILLIS( table.timestamp_col )',
+
+    # ── DateTime rounding (missing) ───────────────────────────────
+    'ROUND_HOUR': 'Rounds timestamp down to the nearest hour. Syntax: ROUND_HOUR( table.timestamp_col )',
+    'ROUND_MINUTE': 'Rounds timestamp down to the nearest minute. Syntax: ROUND_MINUTE( table.timestamp_col )',
+    'ROUND_SECOND': 'Rounds timestamp down to the nearest second. Syntax: ROUND_SECOND( table.timestamp_col )',
+    'ROUND_YEAR': 'Rounds date down to start of year. Syntax: ROUND_YEAR( table.date_col )',
+
+    # ── Math (missing) ────────────────────────────────────────────
+    'ABC': 'Absolute value (alias of ABS). Syntax: ABC( table.column )',
+    'ADD': 'Addition operator. Also available as + operator. Syntax: ADD( col1, col2 ) or col1 + col2',
+    'CEIL': 'Rounds up to nearest integer. Syntax: CEIL( table.column ) Returns INT.',
+    'DIV': 'Integer division (floor division). Syntax: DIV( dividend, divisor ) or dividend DIV divisor.',
+    'FLOOR': 'Rounds down to nearest integer. Syntax: FLOOR( table.column ) Returns INT.',
+    'LOG': 'Natural logarithm. Syntax: LOG( table.column ) Returns FLOAT. Column must be > 0.',
+    'MULT': 'Multiplication operator. Also available as * operator. Syntax: MULT( col1, col2 ) or col1 * col2',
+    'ROUND': 'Rounds to specified decimal places. Syntax: ROUND( table.column, decimal_places ) Returns FLOAT.',
+    'SQRT': 'Square root. Syntax: SQRT( table.column ) Returns FLOAT.',
+    'SQUARE': 'Squares a value. Syntax: SQUARE( table.column ) Returns FLOAT. Equivalent to POWER(col, 2).',
+    'SUB': 'Subtraction operator. Also available as - operator. Syntax: SUB( col1, col2 ) or col1 - col2',
+
+    # ── Predicate (missing) ──────────────────────────────────────
+    'BETWEEN': 'Checks if value is within range (inclusive). Syntax: table.col BETWEEN lower AND upper Returns 1/0.',
+    'IS_NULL': 'Returns 1 if value is NULL. Syntax: table.col IS NULL (operator form, not function). Same as ISNULL().',
+    'LIKE': 'Pattern matching with wildcards. Syntax: table.col LIKE "pattern%" where % = any chars, _ = one char.',
+    'LEFT': 'Deprecated string function. Use SUBSTRING instead.',
+    'LEN': 'Returns length of string. Syntax: LEN( table.string_col ) Returns INT.',
+    'LTRIM': 'Removes leading whitespace. Syntax: LTRIM( table.string_col )',
+    'REVERSE': 'Reverses a string. Syntax: REVERSE( table.string_col )',
+    'RIGHT': 'Deprecated string function. Use SUBSTRING instead.',
+    'RTRIM': 'Removes trailing whitespace. Syntax: RTRIM( table.string_col )',
+    'STR_TO_INT': 'Converts string to integer. Syntax: STR_TO_INT( table.string_col ) Returns INT or NULL if not numeric.',
+    'STRINGHASH': 'Returns hash of string as INT. Syntax: STRINGHASH( table.string_col )',
+    'SUBSTRING': 'Extracts substring. Syntax: SUBSTRING( table.string_col, start_pos [, length] ) 1-based indexing.',
+
+    # ── Process (missing) ─────────────────────────────────────────
+    'ACTIVATION_COUNT': 'Returns number of times an edge (transition) was activated. Syntax: ACTIVATION_COUNT( SOURCE["A"] TARGET["B"] )',
+    'CLUSTER_VARIANTS': 'Clusters process variants. Syntax: CLUSTER_VARIANTS( k [, ESTIMATE_CLUSTER_PARAMS(...)] )',
+    'ESTIMATE_CLUSTER_PARAMS': 'Estimates optimal cluster parameters for CLUSTER_VARIANTS. Syntax: ESTIMATE_CLUSTER_PARAMS( max_k )',
+    'PROCESS_EQUALS': 'Checks if case follows exact process sequence. Syntax: PROCESS_EQUALS( "A" > "B" > "C" ) Returns 1/0.',
+    'SOURCE_TARGET': 'Computes values for process edges (transitions). SOURCE("ACTIVITIES"."TIMESTAMP") gives start timestamp; TARGET gives end timestamp of the edge.',
+
+    # ── Statistics (missing) ──────────────────────────────────────
+    'QNORM': 'Quantile of normal distribution. Syntax: QNORM( probability ) Returns FLOAT. probability: 0.0-1.0.',
+
+    # ── ML (missing) ──────────────────────────────────────────────
+    'DECISION_TREE': 'Decision tree classification. Syntax: DECISION_TREE( TRAIN_DT( INPUT(...), OUTPUT(...) ), PREDICT(...) )',
+
+    # ── Custom (missing) ──────────────────────────────────────────
+    'USER_NAME': 'Returns the currently logged-in username. Syntax: USER_NAME() Returns STRING.',
+
+    # ── Data generation (missing) ─────────────────────────────────
+    'RANGE': 'Creates a range of values (older syntax). Syntax: RANGE( start, end, step ) Use GENERATE_RANGE in modern PQL.',
 }
 
 PANEL_DATA = {
@@ -1134,7 +1231,7 @@ with st.sidebar:
         'background:linear-gradient(135deg,#6366f1,#8b5cf6);'
         'display:flex;align-items:center;justify-content:center;font-size:18px;">⚡</div>'
         '<div><div style="font-size:15px;font-weight:700;color:#f1f5f9;">PQL Assistant</div>'
-        '<div style="font-size:11px;color:#475569;">175 functions · auto-verified</div></div></div>',
+        '<div style="font-size:11px;color:#475569;">230 functions · auto-verified</div></div></div>',
         unsafe_allow_html=True,
     )
 
@@ -1237,7 +1334,7 @@ Every query I generate is automatically **verified and corrected** by a second A
 - 🔨 **Write** PQL from a plain-English description
 - 🔍 **Explain** existing PQL line by line
 - ⚡ **Optimize** slow or incorrect queries
-- 📚 **Teach** any of the 175 PQL functions with examples
+- 📚 **Teach** any of the 230 PQL functions with examples
 - ✅ **Auto-verify** every generated query for correctness
 
 **Try asking:**
@@ -1245,7 +1342,7 @@ Every query I generate is automatically **verified and corrected** by a second A
 - *"How do I use PU_COUNT with a filter condition?"*
 - *"Detect rework loops where the same activity repeats more than twice"*
 
-→ Use the sidebar to change complexity or browse all 175 functions.
+→ Use the sidebar to change complexity or browse all 230 functions.
 """)
 
 # ──────────────────────────────────────────────────────────────
