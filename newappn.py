@@ -26,15 +26,83 @@ from groq import Groq
 
 COMPACT_REFS = {
     'CREATE_EVENTLOG': 'Returns an activity table based on a given lead object and included event types. Used to generate event logs from an object perspective in OCPM. Syntax: CREATE_EVENTLOG( lead_object, event_type_list )',
-    'PU_COUNT': 'Counts rows in source table for each row in target table. Prefer over PU_COUNT_DISTINCT for key columns. Syntax: PU_COUNT( target_table, source_table.column [, filter_expression] )',
-    'PU_SUM': 'Sums values from source table for each row in target table. Syntax: PU_SUM( target_table, source_table.column [, filter_expression] )',
-    'PU_AVG': 'Average of source column per target row. Significantly cheaper than PU_MEDIAN. Syntax: PU_AVG( target_table, source_table.column [, filter_expression] )',
-    'PU_MAX': 'Maximum of source column per target row. Syntax: PU_MAX( target_table, source_table.column [, filter_expression] ) Requires 1:N relationship.',
-    'PU_MIN': 'Minimum of source column per target row. Syntax: PU_MIN( target_table, source_table.column [, filter_expression] ) Requires 1:N relationship.',
-    'PU_FIRST': 'First element of source column per target row. Syntax: PU_FIRST( target_table, source_table.column [, filter_expression] [, ORDER BY col [ASC|DESC]] )',
-    'PU_LAST': 'Last element of source column per target row. Syntax: PU_LAST( target_table, source_table.column [, filter_expression] [, ORDER BY col [ASC|DESC]] )',
-    'PU_MEDIAN': 'Median of source column per target row. Requires sorting — expensive. Use PU_AVG when possible. Syntax: PU_MEDIAN( target_table, source_table.column [, filter_expression] )',
-    'PU_COUNT_DISTINCT': 'Distinct count per target row. Use PU_COUNT when column is a key. Syntax: PU_COUNT_DISTINCT( target_table, source_table.column [, filter_expression] )',
+    'PU_COUNT': '''[OFFICIAL DOCS] Counts non-NULL rows in source per target row.
+Syntax: PU_COUNT( target_table, source_table.column [, filter_expression] )
+- Returns 0 (not NULL) when no matching rows exist — unique among PU functions
+- Requires 1:N relationship: target_table is parent (1-side), source is child (N-side)
+- target_table can also be DOMAIN_TABLE(...) or CONSTANT()
+- PU_COUNT IGNORES global filters — use filter_expression arg for filter-aware counts
+- PREFER over PU_COUNT_DISTINCT when column is already a key (much faster)
+- PREFER over PU_SUM for counting; PU_COUNT is less expensive than PU_SUM
+- Example: PU_COUNT("CASES", "ACTIVITIES"."CASE_ID", "ACTIVITIES"."ACTIVITY" = 'Approve')''',
+
+    'PU_SUM': '''[OFFICIAL DOCS] Sums source column per target row.
+Syntax: PU_SUM( target_table, source_table.column [, filter_expression] )
+- Returns NULL (not 0) when no matching rows exist
+- Requires 1:N relationship between target_table and source table
+- PU_SUM IGNORES global filters — filter via filter_expression argument
+- PU_COUNT is less expensive than PU_SUM for counting — prefer PU_COUNT when possible
+- Example: PU_SUM("VENDORS", "ORDERS"."AMOUNT")
+- Example (filtered): PU_SUM("CASES", "ACTIVITIES"."AMOUNT", "ACTIVITIES"."TYPE" = 'Invoice')''',
+
+    'PU_AVG': '''[OFFICIAL DOCS] Average of source column per target row. Always returns FLOAT.
+Syntax: PU_AVG( target_table, source_table.column [, filter_expression] )
+- Returns NULL when no matching rows exist
+- Input column must be INT or FLOAT; result is always FLOAT
+- MUCH cheaper than PU_MEDIAN — prefer PU_AVG unless true median required
+- PU_AVG IGNORES global filters — filter via filter_expression argument
+- Example: PU_AVG("VENDORS", "ORDERS"."LEAD_TIME_DAYS")''',
+
+    'PU_MAX': '''[OFFICIAL DOCS] Maximum of source column per target row.
+Syntax: PU_MAX( target_table, source_table.column [, filter_expression] )
+- Returns NULL when no matching rows exist
+- Requires 1:N relationship
+- Used for throughput over multiple grouped cases:
+  DATEDIFF('dd', PU_MIN("VENDORS","ACTIVITIES"."TIMESTAMP"), PU_MAX("VENDORS","ACTIVITIES"."TIMESTAMP"))
+- From official Celonis FAQ: PU_MAX("_CEL_CASES", SECONDS_BETWEEN(TARGET("_CEL_ACTIVITIES"."EVENTTIME"), SOURCE("_CEL_ACTIVITIES"."EVENTTIME")))''',
+
+    'PU_MIN': '''[OFFICIAL DOCS] Minimum of source column per target row.
+Syntax: PU_MIN( target_table, source_table.column [, filter_expression] )
+- Returns NULL when no matching rows exist
+- Requires 1:N relationship
+- Combined with PU_MAX for throughput over multiple grouped cases (NOT CALC_THROUGHPUT which is per-case)''',
+
+    'PU_FIRST': '''[OFFICIAL DOCS] Returns first element of source column for each target row.
+Syntax: PU_FIRST( target_table, source_table.column [, filter_expression] [, ORDER BY source_table.column [ASC|DESC]] )
+- Returns NULL when no matching rows exist (not 0)
+- ALWAYS use explicit ORDER BY unless on implicit-sorted activity table
+- No guaranteed order without ORDER BY clause
+- PU_FIRST(..., ORDER BY col DESC) == PU_LAST(..., ORDER BY col ASC)
+- Result is a scalar at target_table level — DO NOT wrap in another PU function with same target
+- Example (first activity timestamp per case):
+  PU_FIRST("CASES", "ACTIVITIES"."TIMESTAMP", ORDER BY "ACTIVITIES"."TIMESTAMP" ASC)
+- Example (first activity of specific type):
+  PU_FIRST("CASES", "ACTIVITIES"."ACTIVITY", "ACTIVITIES"."TYPE" = 'System', ORDER BY "ACTIVITIES"."TIMESTAMP" ASC)
+- BIND example (1:N:1 relationship):
+  PU_FIRST("VBAK", BIND("VBPA", "KNKK"."KKBER"), "VBPA"."PARVW" = 'RE')''',
+
+    'PU_LAST': '''[OFFICIAL DOCS] Returns last element of source column for each target row.
+Syntax: PU_LAST( target_table, source_table.column [, filter_expression] [, ORDER BY source_table.column [ASC|DESC]] )
+- Returns NULL when no matching rows exist
+- ALWAYS use explicit ORDER BY unless on implicit-sorted activity table
+- PU_LAST(..., ORDER BY col DESC) == PU_FIRST(..., ORDER BY col ASC)
+- Result is a scalar at target_table level — DO NOT wrap in another PU function with same target
+- Example (last activity timestamp per case):
+  PU_LAST("CASES", "ACTIVITIES"."TIMESTAMP", ORDER BY "ACTIVITIES"."TIMESTAMP" ASC)
+- Example (last status per order):
+  PU_LAST("ORDERS", "STATUS_TABLE"."STATUS", ORDER BY "STATUS_TABLE"."CHANGE_DATE" ASC)''',
+
+    'PU_MEDIAN': '''[OFFICIAL DOCS] Median of source column per target row.
+Syntax: PU_MEDIAN( target_table, source_table.column [, filter_expression] )
+- SIGNIFICANTLY more expensive than PU_AVG (requires sorting)
+- Only use when true median is required — otherwise use PU_AVG
+- Returns NULL when no matching rows exist''',
+
+    'PU_COUNT_DISTINCT': '''[OFFICIAL DOCS] Distinct count of source column values per target row.
+Syntax: PU_COUNT_DISTINCT( target_table, source_table.column [, filter_expression] )
+- Returns 0 (not NULL) when no matching rows exist
+- USE PU_COUNT instead when column is already a key (PU_COUNT is less expensive)
+- Use PU_COUNT_DISTINCT only when you genuinely need to count distinct non-key values''',
     'PU_MODE': 'Most frequent value per target row. Syntax: PU_MODE( target_table, source_table.column [, filter_expression] )',
     'PU_PRODUCT': 'Product of source column per target row. Syntax: PU_PRODUCT( target_table, source_table.column [, filter_expression] )',
     'PU_QUANTILE': 'Quantile (0.0-1.0) of source column per target row. Syntax: PU_QUANTILE( target_table, source_table.column, quantile [, filter_expression] )',
@@ -44,7 +112,18 @@ COMPACT_REFS = {
     'COUNT_TABLE': 'Counts rows in a table including NULLs (unlike COUNT). Returns original count even when common table differs. Syntax: COUNT_TABLE( table )',
     'MEDIAN': 'Median per group. Applies to INT, FLOAT, DATE. Syntax: MEDIAN( table.column ) NULLs ignored.',
     'QUANTILE': 'Quantile per group. Syntax: QUANTILE( table.column, quantile ) quantile: float 0.0-1.0.',
-    'GLOBAL': 'Isolates aggregation from common table. Prevents join multiplication. Use when mixing case-level and activity-level columns. Syntax: GLOBAL( aggregation )',
+    'GLOBAL': '''[OFFICIAL DOCS] Isolates aggregation from the common table — prevents join multiplication.
+Syntax: GLOBAL( aggregation_expression )
+- When a query mixes columns from different table levels (e.g. case + activity), Celonis performs
+  an implicit join. This shifts the common table to the activity level, causing case-level
+  aggregations to be multiplied by the number of activities per case.
+- GLOBAL() anchors the aggregation back to the original table, ignoring the join shift.
+- Official example from Celonis FAQ:
+  CASE WHEN AVG("Companies"."Value") > GLOBAL(AVG("Companies"."Value")) THEN 'larger' ELSE 'smaller' END
+- ALWAYS wrap CALC_THROUGHPUT when combined with activity-level columns:
+  GLOBAL(AVG(CALC_THROUGHPUT(CASE_START TO CASE_END, REMAP_TIMESTAMPS("ACTIVITIES"."TIMESTAMP", DAYS))))
+- ALWAYS wrap case-level COUNT/SUM when mixed with activity columns:
+  GLOBAL(COUNT("CASES"."CASE_ID")) / GLOBAL(COUNT("ACTIVITIES"."ACTIVITY"))''',
     'RUNNING_SUM': 'Cumulative sum of previous rows. Syntax: RUNNING_SUM( column [, ORDER BY (...)] [, PARTITION BY (...)] )',
     'WINDOW_AVG': 'Average over a sliding window. Syntax: WINDOW_AVG( table.values, lower_bound, upper_bound [, ORDER BY ...] [, PARTITION BY ...] )',
     'STRING_AGG': 'Concatenates strings with delimiter. Syntax: STRING_AGG( table.column, "delim" [, ORDER BY ...] [, PARTITION BY ...] )',
@@ -67,15 +146,65 @@ Average conforming throughput (official doc pattern):
       THEN CALC_THROUGHPUT(CASE_START TO CASE_END, REMAP_TIMESTAMPS("ACTIVITIES"."TIMESTAMP", HOURS)) / 24
       ELSE NULL END)
 ALL_OCCURRENCE[''] is DEPRECATED since 4.6 — use CASE_START instead.''',
-    'CALC_REWORK': 'Counts activities per case (rework = repeated activities). Syntax: CALC_REWORK() | CALC_REWORK(filter) | CALC_REWORK(activity_table.col) Returns INT on case table.',
+    'CALC_REWORK': '''[OFFICIAL DOCS] Counts number of activities per case. Result temporarily added to case table.
+Syntax: CALC_REWORK() | CALC_REWORK( filter_expression ) | CALC_REWORK( activity_table.column )
+- Returns INT column on CASE table (not activity table)
+- NULL case IDs → result is 0; cases without join partner in case table are ignored
+- filter_expression: restricts which activities are counted
+- activity_table.column: selects event log when multiple exist
+- Rework detection (repeated activity): FILTER CALC_REWORK("ACTIVITIES"."ACTIVITY" = 'Review') > 1
+- Total step count: CALC_REWORK() counts ALL activities per case''',
+
     'CALC_CROP': 'Crops cases to event range, returns 1 in range, NULL outside. Syntax: CALC_CROP( begin TO end, activity_table.col )',
     'CALC_CROP_TO_NULL': 'Crops cases to event range, keeps values in range, NULL outside. Syntax: CALC_CROP_TO_NULL( begin TO end, activity_table.col )',
-    'MATCH_ACTIVITIES': 'Flags cases with certain activities (order-independent). Syntax: MATCH_ACTIVITIES( [STARTING list] [NODE list] [ENDING list] [EXCLUDING list] )',
-    'MATCH_PROCESS': 'Matches process variants against node/edge pattern (order-sensitive). Syntax: MATCH_PROCESS( [table.col,] NODE ... CONNECTED BY edge, ... )',
+
+    'MATCH_ACTIVITIES': '''[OFFICIAL DOCS] Flags cases containing specified activities. Order-INDEPENDENT.
+Syntax: MATCH_ACTIVITIES( [STARTING node_list] [NODE node_list] [ENDING node_list] [EXCLUDING node_list] )
+- Returns 1 matching / 0 non-matching — use with FILTER or CASE WHEN
+- STARTING: activity must be first; ENDING: must be last; NODE: anywhere; EXCLUDING: must not appear
+- Use MATCH_PROCESS for order-sensitive matching
+- Example: FILTER MATCH_ACTIVITIES(NODE('Approve'), NODE('Pay'), EXCLUDING('Cancel')) = 1
+- Example: FILTER MATCH_ACTIVITIES(STARTING('Create'), ENDING('Close')) = 1''',
+
+    'MATCH_PROCESS': '''[OFFICIAL DOCS] Matches cases against ordered node/edge pattern. Order-SENSITIVE.
+Syntax: MATCH_PROCESS( [activity_table.string_col,] node(, node)* CONNECTED BY edge(, edge)* )
+- Returns INT: 1 matching, 0 non-matching
+- Node types: NODE | OPTIONAL | LOOP | OPTIONAL_LOOP | STARTING | ENDING
+  NODE [act1, act2]: one of act1/act2 must appear. Multiple activities = OR logic
+  STARTING [act]: first activity. ENDING [act]: last activity. LOOP [act]: appears 1+ times
+- Edge types: DIRECT [nodeA, nodeB] = B directly follows A (no gap)
+              EVENTUALLY [nodeA, nodeB] = B eventually follows A (gaps allowed)
+- LIKE supports wildcards: NODE [LIKE 'Approve%']
+- Example:
+  FILTER MATCH_PROCESS(
+    STARTING ["Create Order"] AS n1,
+    NODE ["Approve"] AS n2,
+    ENDING ["Close"] AS n3
+    CONNECTED BY EVENTUALLY[n1, n2], EVENTUALLY[n2, n3]
+  ) = 1''',
     'MATCH_PROCESS_REGEX': 'Filters variants using regex over activity names. Syntax: MATCH_PROCESS_REGEX( [table.col,] "regex_pattern" )',
-    'ACTIVITY_LAG': 'Returns row preceding current row by offset within a case. Syntax: ACTIVITY_LAG( activity_table.column [, offset] ) Default offset: 1.',
-    'ACTIVITY_LEAD': 'Returns row following current row by offset within a case. Syntax: ACTIVITY_LEAD( activity_table.column [, offset] ) Default offset: 1.',
-    'PROCESS_ORDER': 'Deprecated. Returns position of each activity within a case. Use INDEX_ACTIVITY_ORDER instead.',
+    'ACTIVITY_LAG': '''[OFFICIAL DOCS] Returns value from preceding row by offset within same case.
+Syntax: ACTIVITY_LAG( activity_table.column [, offset] )  Default offset: 1
+- Returns NULL if no preceding row at that offset
+- Use for transition time: SECONDS_BETWEEN(ACTIVITY_LAG("ACTIVITIES"."TIMESTAMP"), "ACTIVITIES"."TIMESTAMP")''',
+    'ACTIVITY_LEAD': '''[OFFICIAL DOCS] Returns value from following row by offset within same case.
+Syntax: ACTIVITY_LEAD( activity_table.column [, offset] )  Default offset: 1
+- Returns NULL if no following row at that offset''',
+    'PROCESS_ORDER': 'DEPRECATED — use INDEX_ACTIVITY_ORDER instead. Returns position of each activity within a case.',
+    'INDEX_ACTIVITY_ORDER': '''[OFFICIAL DOCS] Returns 1-based position of each activity within its case.
+Syntax: INDEX_ACTIVITY_ORDER( activity_table.column )
+- Returns INT; only non-NULL activities counted
+- Replaces deprecated PROCESS_ORDER
+- Use to identify first/last activity: CASE WHEN INDEX_ACTIVITY_ORDER("ACTIVITIES"."ACTIVITY") = 1 THEN ...''',
+    'INDEX_ACTIVITY_LOOP': '''[OFFICIAL DOCS] Returns how many times an activity has already occurred at that point in the case.
+Syntax: INDEX_ACTIVITY_LOOP( activity_table.column )
+- Returns INT: 0 = first occurrence, 1 = second, 2 = third, etc.
+- Parallel activities ordered by absolute timestamp
+- Used for rework analysis: FILTER INDEX_ACTIVITY_LOOP("ACTIVITIES"."ACTIVITY") > 0 finds all rework rows''',
+    'INDEX_ACTIVITY_TYPE': '''[OFFICIAL DOCS] Returns how many times a specific activity TYPE has occurred at that point in the case.
+Syntax: INDEX_ACTIVITY_TYPE( activity_table.column )
+- Returns INT — type-specific loop counter per case
+- Used for Rework per Activity analysis''',
     'BPMN_CONFORMS': 'Binary BPMN conformance check (1=conforming, 0=not). Syntax: BPMN_CONFORMS( event_table.col, bpmn_model [, ALLOW(...)] )',
     'CONFORMANCE': 'Petri net conformance checking. Returns INT flags. Use with READABLE() for violation descriptions.',
     'READABLE': 'Human-readable violation descriptions from CONFORMANCE. Syntax: READABLE( conformance_query )',
@@ -83,7 +212,15 @@ ALL_OCCURRENCE[''] is DEPRECATED since 4.6 — use CASE_START instead.''',
     'TRANSIT_COLUMN': 'Computes transition edges between related cases from two processes.',
     'MANUAL_MINER': 'Defines manual transitions for TRANSIT_COLUMN. Syntax: MANUAL_MINER( activity_table.col, ["A", "B"] )',
     'ADD_DAYS': 'Adds days to a date. Syntax: ADD_DAYS( table.base_col, table.days_col ) base: DATE, days: INT. Output: DATE.',
-    'DATEDIFF': 'Date difference in specified unit. Syntax: DATEDIFF( unit, table.date1, table.date2 ) unit: ms|ss|mi|hh|dd|mm|yy. Output: FLOAT.',
+    'DATEDIFF': '''[OFFICIAL DOCS] Computes difference between two dates in specified unit. Returns FLOAT.
+Syntax: DATEDIFF( unit, table.date1, table.date2 ) unit: ms|ss|mi|hh|dd|mm|yy
+- Supported input: DATE column type
+- NULL in any parameter → NULL result
+- For sub-day precision with calendar support use SECONDS_BETWEEN / HOURS_BETWEEN
+- Example: DATEDIFF('dd', "ORDERS"."CREATE_DATE", "ORDERS"."CLOSE_DATE")
+- Example (cycle time using PU_FIRST/PU_LAST — correct pattern):
+  DATEDIFF('dd', PU_FIRST("CASES","ACTIVITIES"."TIMESTAMP", ORDER BY "ACTIVITIES"."TIMESTAMP" ASC),
+                 PU_LAST("CASES","ACTIVITIES"."TIMESTAMP", ORDER BY "ACTIVITIES"."TIMESTAMP" ASC))''',
     'HOURS_BETWEEN': 'Difference in hours. Supports calendar. Syntax: HOURS_BETWEEN( table.date1, table.date2 [, calendar] )',
     'MINUTES_BETWEEN': 'Difference in minutes. Syntax: MINUTES_BETWEEN( table.date1, table.date2 [, calendar] )',
     'SECONDS_BETWEEN': 'Difference in seconds. Syntax: SECONDS_BETWEEN( table.date1, table.date2 [, calendar] )',
@@ -105,7 +242,17 @@ ALL_OCCURRENCE[''] is DEPRECATED since 4.6 — use CASE_START instead.''',
     'DATE_MATCH': 'Returns 1 if date matches filter lists. Syntax: DATE_MATCH( col, [YEARS], [QUARTERS], [MONTHS], [WEEKS], [DAYS] )',
     'DAYS_IN_MONTH': 'Returns number of days in the month of the given date. Syntax: DAYS_IN_MONTH( table.col )',
     'IN_CALENDAR': 'Checks if date is within a calendar. Returns 1 or NULL. Syntax: IN_CALENDAR( ts_col, calendar )',
-    'REMAP_TIMESTAMPS': 'Remaps timestamps per calendar/unit. Used in CALC_THROUGHPUT. Syntax: REMAP_TIMESTAMPS( ts_col, unit [, calendar] )',
+    'REMAP_TIMESTAMPS': '''[OFFICIAL DOCS] Converts DATE column to integer count of time units since epoch (1970-01-01).
+Syntax: REMAP_TIMESTAMPS( activity_table.timestamp_col, unit [, calendar_specification] )
+Units: DAYS | HOURS | MINUTES | SECONDS | MILLISECONDS
+- Primary use: provides the timestamps argument to CALC_THROUGHPUT
+- Also used in SOURCE/TARGET edge throughput calculations
+- Supports 3 calendar types: WEEKDAY_CALENDAR, FACTORY_CALENDAR, WORKDAY_CALENDAR
+- Multiple calendars can be combined with INTERSECT
+- Returns INT (epoch offset in specified unit); NULL input → NULL output
+- Official example: REMAP_TIMESTAMPS("ACTIVITIES"."TIMESTAMP", DAYS)
+- With workday calendar: REMAP_TIMESTAMPS("ACTIVITIES"."TIMESTAMP", HOURS, WEEKDAY_CALENDAR(MON,TUE,WED,THU,FRI))
+- Process Explorer uses: REMAP_TIMESTAMPS("_CEL_ACTIVITIES"."EVENTTIME", SECONDS) for edge KPIs''',
     'FACTORY_CALENDAR': 'Defines factory calendar with specific work intervals. Used with REMAP_TIMESTAMPS.',
     'WORKDAY_CALENDAR': 'Defines work days from a table. Used with ADD_WORKDAYS and date diff functions.',
     'WEEKDAY_CALENDAR': 'Defines which weekdays count as work days. Syntax: WEEKDAY_CALENDAR( MON, TUE, ... )',
@@ -348,19 +495,44 @@ CATEGORY_ICONS = {
 FUNCTION_NAMES = list(COMPACT_REFS.keys())
 PU_FUNCTIONS = [fn for fn in FUNCTION_NAMES if fn.startswith("PU_")]
 
-PU_HINT_PATTERNS = [
-    r'per\s+case', r'per\s+vendor', r'per\s+order', r'per\s+customer',
-    r'per\s+\w+', r'group\s+by', r'aggregate', r'count\s+per', r'sum\s+per',
+# Intent → function mapping based on official Celonis docs
+INTENT_PATTERNS = [
+    # PU aggregation hints
+    (r'per\s+(case|vendor|order|customer|supplier|group|\w+)', PU_FUNCTIONS[:8]),
+    (r'(aggregate|group\s+by|count\s+per|sum\s+per|average\s+per)', PU_FUNCTIONS[:8]),
+    # Throughput hints → always suggest CALC_THROUGHPUT
+    (r'(throughput|cycle.?time|lead.?time|duration|process.?time|elapsed)', ['CALC_THROUGHPUT', 'REMAP_TIMESTAMPS', 'GLOBAL']),
+    (r'(first.*last|start.*end|begin.*end).*(time|date|day)', ['CALC_THROUGHPUT', 'REMAP_TIMESTAMPS', 'PU_FIRST', 'PU_LAST', 'DATEDIFF']),
+    # Rework hints
+    (r'(rework|repeat|loop|same.?activit|revisit|multiple.?time)', ['CALC_REWORK', 'INDEX_ACTIVITY_LOOP', 'INDEX_ACTIVITY_TYPE']),
+    # Process path hints
+    (r'(conform|path|sequence|order.*activit|activit.*order|follow)', ['MATCH_PROCESS', 'MATCH_ACTIVITIES', 'CALC_THROUGHPUT']),
+    # Date/time hints
+    (r'(days?\s+between|hours?\s+between|date.?diff|workday|calendar)', ['DATEDIFF', 'HOURS_BETWEEN', 'WORKDAYS_BETWEEN', 'REMAP_TIMESTAMPS']),
+    # Automation rate hint
+    (r'(automat|system.?activit|manual.?activit|bot)', ['PU_COUNT', 'CALC_REWORK', 'GLOBAL']),
+    # Variant hints
+    (r'(variant|process.?flow|happy.?path)', ['VARIANT', 'MATCH_PROCESS', 'MATCH_PROCESS_REGEX']),
+    # Running/window hints
+    (r'(running|cumulative|rolling|window|moving)', ['RUNNING_SUM', 'WINDOW_AVG', 'INDEX_ORDER']),
+    # Filter hints
+    (r'(filter|where|only.*cases|exclude)', ['FILTER', 'MATCH_ACTIVITIES', 'BIND_FILTERS']),
 ]
 
 def detect_functions(text: str):
     text_lower = text.lower()
     found = set()
+
+    # 1. Direct function name mentions
     for fn in FUNCTION_NAMES:
         if fn.lower() in text_lower:
             found.add(fn)
-    if any(re.search(pattern, text_lower) for pattern in PU_HINT_PATTERNS):
-        found.update(PU_FUNCTIONS[:8])
+
+    # 2. Intent-based detection
+    for pattern, fns in INTENT_PATTERNS:
+        if re.search(pattern, text_lower):
+            found.update(fns)
+
     return list(found)
 
 def build_function_context(user_query: str):
@@ -368,8 +540,10 @@ def build_function_context(user_query: str):
     if not funcs:
         return ""
     docs = []
-    for fn in funcs[:12]:
-        if fn in COMPACT_REFS:
+    seen = set()
+    for fn in funcs[:20]:  # expanded from 12
+        if fn in COMPACT_REFS and fn not in seen:
+            seen.add(fn)
             docs.append(f"### {fn}\n{COMPACT_REFS[fn]}")
     return "\n\n".join(docs)
 
@@ -388,12 +562,94 @@ GROQ_MODELS = {
 #  SECTION 3 · SYSTEM PROMPT BUILDER  (hardened)
 # ──────────────────────────────────────────────────────────────
 
+_FUNCTION_SELECTION_GUIDE = """
+## ─── OFFICIAL CELONIS FUNCTION SELECTION GUIDE ───
+## Source: docs.celonis.com — use this to choose the RIGHT function every time
+
+### THROUGHPUT TIME — which function to use?
+
+| Goal | Correct function | WRONG approach |
+|------|-----------------|----------------|
+| Throughput per CASE (start→end) | CALC_THROUGHPUT(CASE_START TO CASE_END, REMAP_TIMESTAMPS(..., DAYS)) | PU_MAX - PU_MIN per case |
+| Throughput per CASE (activity→activity) | CALC_THROUGHPUT(FIRST_OCCURRENCE['A'] TO LAST_OCCURRENCE['B'], REMAP_TIMESTAMPS(...)) | DATEDIFF on activity table |
+| Throughput OVER MULTIPLE CASES (grouped) | DATEDIFF('dd', PU_MIN("GROUP","ACTIVITIES"."TIMESTAMP"), PU_MAX("GROUP","ACTIVITIES"."TIMESTAMP")) | CALC_THROUGHPUT |
+| Cycle time first→last event per case | DATEDIFF('dd', PU_FIRST("CASES","ACTIVITIES"."TIMESTAMP", ORDER BY ...), PU_LAST("CASES","ACTIVITIES"."TIMESTAMP", ORDER BY ...)) | PU_AVG wrapping DATEDIFF |
+| Average throughput across all cases | AVG(CALC_THROUGHPUT(...)) | PU_AVG wrapping CALC_THROUGHPUT |
+| Edge throughput (activity→next activity) | SOURCE/TARGET + SECONDS_BETWEEN or REMAP_TIMESTAMPS | CALC_THROUGHPUT |
+
+### REWORK / REPEATED ACTIVITIES — which function to use?
+
+| Goal | Correct function |
+|------|-----------------|
+| Count activities per case | CALC_REWORK() |
+| Count specific activity per case | CALC_REWORK("ACTIVITIES"."ACTIVITY" = 'Review') |
+| Detect repeated activities (row-level) | INDEX_ACTIVITY_LOOP("ACTIVITIES"."ACTIVITY") > 0 |
+| Count per activity type at a point | INDEX_ACTIVITY_TYPE("ACTIVITIES"."ACTIVITY") |
+| Cases where activity repeats > N times | FILTER PU_COUNT("CASES","ACTIVITIES"."CASE_ID","ACTIVITIES"."ACTIVITY"='Review') > N |
+
+### AGGREGATION — which PU function to use?
+
+| Goal | Correct function | Avoid |
+|------|-----------------|-------|
+| Count rows (key column) | PU_COUNT | PU_COUNT_DISTINCT (slower) |
+| Count distinct values | PU_COUNT_DISTINCT | - |
+| Sum values | PU_SUM | - |
+| Average values | PU_AVG | PU_MEDIAN (much slower) |
+| True median | PU_MEDIAN | - |
+| First/Last value | PU_FIRST / PU_LAST with ORDER BY | Without ORDER BY (undefined) |
+| Simple count vs sum | PU_COUNT (less expensive than PU_SUM) | - |
+
+### FILTERING — which approach?
+
+| Goal | Correct approach |
+|------|-----------------|
+| Simple row filter | FILTER "TABLE"."COL" = 'value' |
+| Filter within PU function | PU_COUNT("CASES","ACTIVITIES"."COL", "ACTIVITIES"."COL" = 'X') — use filter arg |
+| Filter on aggregation result | FILTER PU_COUNT(...) > 5 |
+| Filter-aware PU (avoid) | FILTER_TO_NULL inside PU — BREAKS CACHING, avoid unless no alternative |
+| Filter to different table | BIND_FILTERS( target_table, condition ) |
+
+### PROCESS MATCHING — which function?
+
+| Goal | Correct function |
+|------|-----------------|
+| Cases containing specific activities (no order) | MATCH_ACTIVITIES |
+| Cases following specific ordered path | MATCH_PROCESS |
+| Cases matching activity name pattern (regex) | MATCH_PROCESS_REGEX |
+| Cases where activity is at specific position | INDEX_ACTIVITY_ORDER |
+
+### WHEN TO USE GLOBAL()
+
+Use GLOBAL() when:
+1. Query has BOTH case-level AND activity-level columns → common table shifts to activity level
+2. CALC_THROUGHPUT combined with COUNT/SUM/AVG
+3. Comparing per-group value to overall average: CASE WHEN AVG(...) > GLOBAL(AVG(...)) THEN ...
+Do NOT use GLOBAL() when: query is purely case-level or purely activity-level
+
+### COMMON TABLE RULES (from Celonis docs)
+- PU-functions IGNORE global filters (cached)
+- Standard aggregations (AVG, COUNT, SUM) RESPECT global filters (not cached)
+- FILTER_TO_NULL makes PU filter-aware BUT breaks caching — avoid
+- PU functions result type: PU_COUNT → INT, PU_SUM → same as source, PU_AVG → always FLOAT
+- PU_COUNT returns 0 for no match; all other PU functions return NULL for no match
+
+### NULL BEHAVIOUR REFERENCE
+| Function | No matching rows | NULL in source |
+|----------|-----------------|----------------|
+| PU_COUNT | 0 | ignored (row excluded) |
+| PU_COUNT_DISTINCT | 0 | ignored |
+| PU_SUM, PU_AVG, PU_MIN, PU_MAX | NULL | ignored |
+| PU_FIRST, PU_LAST | NULL | treated as non-existent |
+| CALC_THROUGHPUT | NULL if single activity or end<start | - |
+| DATEDIFF | NULL if any param is NULL | - |
+"""
+
 _SQL_PROHIBITION = """
 ## CRITICAL — PQL IS NOT SQL. NEVER WRITE SQL.
 
 These SQL keywords DO NOT EXIST in PQL. If you write any of them, the query is WRONG:
-  ✗ SELECT   ✗ FROM    ✗ JOIN    ✗ LEFT JOIN   ✗ GROUP BY
-  ✗ HAVING   ✗ WITH    ✗ AS (CTE)  ✗ OVER(...)  ✗ ORDER BY (as SQL clause)
+  NO: SELECT   FROM    JOIN    LEFT JOIN   GROUP BY
+  NO: HAVING   WITH    AS (CTE alias)   OVER(...)   ORDER BY (as standalone SQL clause)
 
 ### WRONG — SQL (never write this):
 ```sql
@@ -630,7 +886,7 @@ Write in pql block. Explain each section. Flag NULL handling.
 def build_system_prompt(complexity: str, show_reasoning: bool) -> str:
     func_ref = "\n".join(f"### {fn}\n{doc}" for fn, doc in COMPACT_REFS.items())
 
-    base = f"""You are an expert Celonis PQL (Process Query Language) engineer.
+    base = f"""You are an expert Celonis PQL (Process Query Language) engineer with deep knowledge of official Celonis documentation.
 Write ACCURATE, OPTIMIZED, PRODUCTION-READY PQL queries.
 
 ## PQL Core Rules
@@ -644,7 +900,9 @@ Write ACCURATE, OPTIMIZED, PRODUCTION-READY PQL queries.
 
 {_SQL_PROHIBITION}
 
-## Full PQL Function Reference
+{_FUNCTION_SELECTION_GUIDE}
+
+## Full PQL Function Reference (with official Celonis docs)
 {func_ref}
 """
 
@@ -657,18 +915,18 @@ Write ACCURATE, OPTIMIZED, PRODUCTION-READY PQL queries.
     if show_reasoning and complexity in ("Advanced", "Expert"):
         base += """
 ## Response Format
-1. **Analysis** — state what tables, joins, functions are needed
+1. **Analysis** — identify tables, joins, and which function(s) the selection guide points to
 2. **Query** — complete PQL in a ```pql code block
 3. **Explanation** — explain each part of the query
-4. **Performance notes** — optimization choices
-5. **Edge cases** — NULL handling or filter propagation issues
+4. **Performance notes** — optimization choices (e.g. why PU_COUNT over PU_COUNT_DISTINCT)
+5. **Edge cases** — NULL handling, filter propagation, GLOBAL() requirement
 """
     elif complexity == "Intermediate":
         base += """
 ## Response Format
 1. PQL in a ```pql code block
-2. Explain each function used
-3. Mention important gotchas
+2. Explain each function used and why it was chosen
+3. Mention important gotchas (NULL, GLOBAL, filter awareness)
 """
     else:
         base += """
