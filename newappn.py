@@ -620,12 +620,31 @@ def detect_functions(text: str):
     text_lower = text.lower()
     found = set()
 
-    # 1. Direct function name mentions
-    for fn in FUNCTION_NAMES:
-        if fn.lower() in text_lower:
-            found.add(fn)
+    # Functions that are short or match common English words need word-boundary matching
+    # to avoid false positives (e.g. 'IN' matching 'filter', 'MIN' matching 'minimum', etc.)
+    NEEDS_WORD_BOUNDARY = {
+        'AVG', 'SUM', 'MAX', 'MIN', 'VAR', 'IN', 'OR', 'AND', 'NOT',
+        'ADD', 'SUB', 'DIV', 'MULT', 'LOG', 'LEN', 'ABS', 'ABC',
+        'CEIL', 'FLOOR', 'ROUND', 'SQRT', 'SQUARE',
+        'DAY', 'MONTH', 'YEAR', 'HOURS', 'MINUTES', 'SECONDS', 'MILLIS', 'QUARTER',
+        'CASE', 'WHEN', 'LEFT', 'RIGHT', 'LIKE', 'RANGE',
+        'REVERSE', 'BETWEEN', 'SOURCE_TARGET', 'END', 'BY', 'TO',
+        'STDEV', 'COUNT', 'FILTER', 'BIND', 'LOOKUP', 'UPPER', 'LOWER',
+    }
 
-    # 2. Intent-based detection
+    # 1. Direct function name detection — word-boundary aware
+    for fn in FUNCTION_NAMES:
+        fn_lower = fn.lower()
+        if fn in NEEDS_WORD_BOUNDARY:
+            # Use word boundary so 'IN' doesn't match 'filter', 'MIN' doesn't match 'minimum'
+            if re.search(r'\b' + re.escape(fn_lower) + r'\b', text_lower):
+                found.add(fn)
+        else:
+            # Long unambiguous names: safe to use simple substring match
+            if fn_lower in text_lower:
+                found.add(fn)
+
+    # 2. Intent-based detection (unchanged)
     for pattern, fns in INTENT_PATTERNS:
         if re.search(pattern, text_lower):
             found.update(fns)
@@ -981,7 +1000,17 @@ Write in pql block. Explain each section. Flag NULL handling.
 
 
 def build_system_prompt(complexity: str, show_reasoning: bool) -> str:
-    func_ref = "\n".join(f"### {fn}\n{doc}" for fn, doc in COMPACT_REFS.items())
+    # Only embed the most critical "always-needed" functions (not the full 230)
+    # Full function docs are injected dynamically per-query via build_function_context()
+    ALWAYS_INCLUDE = [
+        'GLOBAL', 'CALC_THROUGHPUT', 'PU_COUNT', 'PU_SUM', 'PU_AVG',
+        'PU_FIRST', 'PU_LAST', 'FILTER', 'DATEDIFF', 'REMAP_TIMESTAMPS',
+        'CALC_REWORK', 'MATCH_ACTIVITIES',
+    ]
+    core_refs = "\n\n".join(
+        f"### {fn}\n{COMPACT_REFS[fn]}"
+        for fn in ALWAYS_INCLUDE if fn in COMPACT_REFS
+    )
 
     base = f"""You are an expert Celonis PQL (Process Query Language) engineer with deep knowledge of official Celonis documentation.
 Write ACCURATE, OPTIMIZED, PRODUCTION-READY PQL queries.
@@ -999,8 +1028,12 @@ Write ACCURATE, OPTIMIZED, PRODUCTION-READY PQL queries.
 
 {_FUNCTION_SELECTION_GUIDE}
 
-## Full PQL Function Reference (with official Celonis docs)
-{func_ref}
+## Core PQL Functions (always available)
+{core_refs}
+
+## Note
+Additional relevant function docs are injected dynamically based on the user query.
+The full library has 230 functions — only relevant ones are shown per query.
 """
 
     if complexity in ("Advanced", "Expert"):
@@ -1434,7 +1467,7 @@ Respond with either:
 - Or a corrected ```pql block followed by a brief bullet list of what was fixed
 """
         response = client.chat.completions.create(
-            model=st.session_state.model_id,
+            model="llama-3.1-8b-instant",  # pinned: fast & cheap, never uses user's model
             messages=[
                 {"role": "system", "content": VERIFICATION_SYSTEM},
                 {"role": "user", "content": verify_prompt},
