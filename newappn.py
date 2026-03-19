@@ -52,7 +52,21 @@ COMPACT_REFS = {
     'PARTITION': 'Used in window functions as PARTITION BY ( column, ... ) to define groups.',
     'ZSCORE': 'Z-score (standard deviations from mean). Syntax: ZSCORE( table.column [, PARTITION BY (...)] )',
     'INTERPOLATE': 'Interpolates NULL values. Syntax: INTERPOLATE( column, CONSTANT|LINEAR [, ORDER BY ...] [, PARTITION BY ...] )',
-    'CALC_THROUGHPUT': 'Calculates throughput time between events. Wrap with GLOBAL() when mixing with activity KPIs. Syntax: CALC_THROUGHPUT( CASE_START TO CASE_END, REMAP_TIMESTAMPS("ACTIVITIES"."TIMESTAMP", DAYS) )',
+    'CALC_THROUGHPUT': '''Calculates throughput time per case between two event range specifiers.
+Syntax: CALC_THROUGHPUT( begin_specifier TO end_specifier, REMAP_TIMESTAMPS("ACTIVITIES"."TIMESTAMP", unit) [, activity_table.string_col] )
+begin_specifier: CASE_START | FIRST_OCCURRENCE['activity'] | LAST_OCCURRENCE['activity']
+end_specifier:   CASE_END   | FIRST_OCCURRENCE['activity'] | LAST_OCCURRENCE['activity']
+unit: DAYS | HOURS | MINUTES | SECONDS | MILLISECONDS
+Returns NULL if start > end, or case has only one activity, or activity name not found.
+IMPORTANT: Preferred over DATEDIFF(PU_MIN, PU_MAX) for case-level throughput.
+Wrap with GLOBAL() when combined with activity-level columns to prevent join multiplication.
+Official example from Celonis docs:
+  CALC_THROUGHPUT(CASE_START TO CASE_END, REMAP_TIMESTAMPS("ACTIVITIES"."TIMESTAMP", DAYS))
+Average conforming throughput (official doc pattern):
+  AVG(CASE WHEN PU_SUM("CASES", ABS(conformance)) = 0
+      THEN CALC_THROUGHPUT(CASE_START TO CASE_END, REMAP_TIMESTAMPS("ACTIVITIES"."TIMESTAMP", HOURS)) / 24
+      ELSE NULL END)
+ALL_OCCURRENCE[''] is DEPRECATED since 4.6 — use CASE_START instead.''',
     'CALC_REWORK': 'Counts activities per case (rework = repeated activities). Syntax: CALC_REWORK() | CALC_REWORK(filter) | CALC_REWORK(activity_table.col) Returns INT on case table.',
     'CALC_CROP': 'Crops cases to event range, returns 1 in range, NULL outside. Syntax: CALC_CROP( begin TO end, activity_table.col )',
     'CALC_CROP_TO_NULL': 'Crops cases to event range, keeps values in range, NULL outside. Syntax: CALC_CROP_TO_NULL( begin TO end, activity_table.col )',
@@ -426,11 +440,54 @@ PU_SUM( "VENDORS", PU_SUM( "ORDERS", "LINE_ITEMS"."AMOUNT" ) )
 PU_COUNT( "CASES", "ACTIVITIES"."CASE_ID", "ACTIVITIES"."ACTIVITY" = 'Approve' )
 ```
 
-### P4 · Throughput between specific milestones
+### P4 · Throughput per case — official Celonis doc patterns
 ```pql
+-- Case start to end (days) — from official Celonis docs
 CALC_THROUGHPUT(
-  FIRST_OCCURRENCE ['Create Order'] TO LAST_OCCURRENCE ['Ship'],
+  CASE_START TO CASE_END,
   REMAP_TIMESTAMPS( "ACTIVITIES"."TIMESTAMP", DAYS )
+)
+
+-- Case start to end (hours, then /24 for days) — from official Celonis FAQ pattern
+CALC_THROUGHPUT(
+  CASE_START TO CASE_END,
+  REMAP_TIMESTAMPS( "ACTIVITIES"."TIMESTAMP", HOURS )
+) / 24
+
+-- Between specific activities
+CALC_THROUGHPUT(
+  FIRST_OCCURRENCE['Create Order'] TO LAST_OCCURRENCE['Ship'],
+  REMAP_TIMESTAMPS( "ACTIVITIES"."TIMESTAMP", DAYS )
+)
+
+-- Average throughput across all cases (standard aggregation wrapping CALC_THROUGHPUT)
+AVG(
+  CALC_THROUGHPUT(
+    CASE_START TO CASE_END,
+    REMAP_TIMESTAMPS( "ACTIVITIES"."TIMESTAMP", DAYS )
+  )
+)
+
+-- Conforming throughput — official Celonis docs pattern
+AVG(
+  CASE WHEN PU_SUM( "CASES", ABS( conformance_col ) ) = 0
+  THEN CALC_THROUGHPUT(
+         CASE_START TO CASE_END,
+         REMAP_TIMESTAMPS( "ACTIVITIES"."TIMESTAMP", HOURS )
+       ) / 24
+  ELSE NULL END
+)
+```
+NOTE: CALC_THROUGHPUT is the preferred approach for case throughput. It is better than
+DATEDIFF(PU_MIN("CASES", ...), PU_MAX("CASES", ...)) because it handles edge cases
+(single-activity cases → NULL, start > end → NULL) and supports calendars via REMAP_TIMESTAMPS.
+Throughput OVER MULTIPLE CASES uses PU_MIN and PU_MAX (not CALC_THROUGHPUT):
+```pql
+-- Throughput over multiple cases grouped by vendor (from Celonis docs)
+DATEDIFF(
+  'dd',
+  PU_MIN( "VENDORS", "ACTIVITIES"."TIMESTAMP" ),
+  PU_MAX( "VENDORS", "ACTIVITIES"."TIMESTAMP" )
 )
 ```
 
@@ -465,6 +522,71 @@ WORKDAYS_BETWEEN(
   "ORDERS"."CLOSE_DATE"
 )
 ```
+
+### P9 · Cycle time: first to last event per case (days)
+CRITICAL RULE: PU_FIRST / PU_LAST pull scalar DATE values UP to the case table.
+Once they are at case-table level, use DATEDIFF directly between them.
+NEVER wrap an outer PU_AVG around DATEDIFF(PU_FIRST(...), PU_LAST(...)) —
+PU_FIRST and PU_LAST are already case-level scalars; there is nothing left to aggregate over.
+
+```pql
+-- WRONG — PU_AVG wrapping DATEDIFF of already-aggregated PU values:
+PU_AVG(
+  "CASES",
+  DATEDIFF( 'dd',
+    PU_FIRST( "CASES", "ACTIVITIES"."TIMESTAMP", ORDER BY "ACTIVITIES"."TIMESTAMP" ASC ),
+    PU_LAST(  "CASES", "ACTIVITIES"."TIMESTAMP", ORDER BY "ACTIVITIES"."TIMESTAMP" ASC )
+  )
+)
+
+-- CORRECT — cycle time per case row (shows on case table):
+DATEDIFF(
+  'dd',
+  PU_FIRST(
+    "CASES",
+    "ACTIVITIES"."TIMESTAMP",
+    ORDER BY ( "ACTIVITIES"."TIMESTAMP" ASC )
+  ),
+  PU_LAST(
+    "CASES",
+    "ACTIVITIES"."TIMESTAMP",
+    ORDER BY ( "ACTIVITIES"."TIMESTAMP" ASC )
+  )
+)
+
+-- CORRECT — average cycle time across all cases (single KPI number):
+AVG(
+  DATEDIFF(
+    'dd',
+    PU_FIRST(
+      "CASES",
+      "ACTIVITIES"."TIMESTAMP",
+      ORDER BY ( "ACTIVITIES"."TIMESTAMP" ASC )
+    ),
+    PU_LAST(
+      "CASES",
+      "ACTIVITIES"."TIMESTAMP",
+      ORDER BY ( "ACTIVITIES"."TIMESTAMP" ASC )
+    )
+  )
+)
+```
+
+### P10 · General rule — never nest PU inside PU value argument
+PU functions return a scalar at the TARGET table level.
+Once a value is at the target table level it is no longer a child-table column.
+You CANNOT feed a PU_* result as the value argument of another PU_* that shares the same target table.
+```pql
+-- WRONG:
+PU_AVG( "CASES", PU_FIRST( "CASES", "ACTIVITIES"."TIMESTAMP" ) )
+
+-- CORRECT: PU_FIRST already IS a case-level value. Use it directly:
+PU_FIRST( "CASES", "ACTIVITIES"."TIMESTAMP", ORDER BY ( "ACTIVITIES"."TIMESTAMP" ASC ) )
+
+-- Valid nesting: different target tables (3-level hierarchy)
+PU_SUM( "VENDORS", PU_SUM( "ORDERS", "LINE_ITEMS"."AMOUNT" ) )
+-- ✓ outer target="VENDORS" (vendor level), inner target="ORDERS" (order level) — different levels, OK.
+```
 """
 
 _EXPERT_FRAMEWORK = """
@@ -496,6 +618,12 @@ Write in pql block. Explain each section. Flag NULL handling.
 5. Missing double-quotes on table/column names
 6. Single-quoting column names
 7. ANY SQL syntax (SELECT/FROM/JOIN/GROUP BY)
+8. **CRITICAL — Wrapping PU_FIRST/PU_LAST inside another PU function with the SAME target table.**
+   PU_FIRST("CASES", ...) and PU_LAST("CASES", ...) already return case-level scalars.
+   Using PU_AVG("CASES", DATEDIFF(..., PU_FIRST("CASES",...), PU_LAST("CASES",...))) is WRONG.
+   The outer PU has nothing to aggregate — both inner values are already at "CASES" level.
+   CORRECT: DATEDIFF('dd', PU_FIRST("CASES",...), PU_LAST("CASES",...)) — no outer PU needed.
+   To get an overall average: AVG( DATEDIFF(...) ) — standard aggregation, not PU.
 """
 
 
@@ -587,6 +715,16 @@ Your ONLY job: review PQL code and fix any errors. Return the corrected query.
 8. FILTER_TO_NULL inside PU functions → replace with PU filter argument
 9. PU-function direction: target_table is the PARENT (1-side), source is CHILD (N-side)
 10. MEDIAN used when AVG would work → add a comment noting performance cost
+11. CRITICAL — Outer PU wrapping DATEDIFF of inner PU with same target table is WRONG.
+    Example of the ERROR:
+      PU_AVG( "CASES", DATEDIFF( 'dd', PU_FIRST( "CASES", ... ), PU_LAST( "CASES", ... ) ) )
+    WHY it's wrong: PU_FIRST("CASES",...) already returns a scalar at the CASES level.
+    Passing it as the value-arg of PU_AVG("CASES",...) means the outer PU has no child rows
+    to aggregate over — both inner values are already case-level scalars.
+    FIX: Remove outer PU. Use DATEDIFF directly:
+      DATEDIFF( 'dd', PU_FIRST( "CASES", ... ), PU_LAST( "CASES", ... ) )
+    For an overall average: AVG( DATEDIFF(...) )  ← standard aggregation, NOT PU_AVG.
+    Valid nesting is ONLY when outer and inner PU have DIFFERENT target tables (3-level hierarchy).
 
 ## Response format:
 - If the query is correct: respond with exactly: VALID
@@ -892,13 +1030,34 @@ def verify_and_fix_pql(pql_query: str) -> tuple[bool, str, list[str]]:
 
     # CALC_THROUGHPUT without GLOBAL
     if 'CALC_THROUGHPUT' in pql_query and 'GLOBAL(' not in pql_query:
-        # Only flag if there are other aggregations nearby suggesting mixed context
         if re.search(r'\b(AVG|COUNT|SUM|MEDIAN)\b', pql_query):
             issues.append("CALC_THROUGHPUT mixed with other aggregations — consider GLOBAL()")
 
     # FILTER_TO_NULL inside PU
     if 'FILTER_TO_NULL' in pql_query and 'PU_' in pql_query:
         issues.append("FILTER_TO_NULL inside PU function — use PU filter argument instead")
+
+    # CRITICAL: Outer PU wrapping DATEDIFF of inner PU with same target table
+    # Pattern: PU_xxx( "TABLE", DATEDIFF( ..., PU_yyy( "TABLE", ... ), PU_zzz( "TABLE", ... ) ) )
+    # Detect: outer PU whose value arg contains inner PU calls with the same quoted table
+    outer_pu_match = re.search(
+        r'PU_\w+\s*\(\s*("[\w]+")\s*,\s*(?:DATEDIFF|HOURS_BETWEEN|MINUTES_BETWEEN|SECONDS_BETWEEN|MILLIS_BETWEEN|WORKDAYS_BETWEEN)',
+        pql_query, re.IGNORECASE
+    )
+    if outer_pu_match:
+        outer_table = outer_pu_match.group(1)
+        # Check if any inner PU uses the same target table
+        inner_pu_same = re.search(
+            r'PU_(?:FIRST|LAST|MIN|MAX|AVG|SUM|COUNT)\s*\(\s*' + re.escape(outer_table),
+            pql_query, re.IGNORECASE
+        )
+        if inner_pu_same:
+            issues.append(
+                f"CRITICAL: Outer PU function wraps DATEDIFF of inner PU_FIRST/PU_LAST with same "
+                f"target table {outer_table}. PU_FIRST/PU_LAST already return case-level scalars — "
+                f"remove the outer PU and use DATEDIFF(..., PU_FIRST(...), PU_LAST(...)) directly. "
+                f"For an overall average, wrap with AVG(...), not PU_AVG(...)."
+            )
 
     # ── Pass 2: LLM review (always runs for Advanced/Expert, or when issues found) ──
     always_verify = st.session_state.complexity in ('Advanced', 'Expert')
