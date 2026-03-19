@@ -16,6 +16,7 @@
 # ╚══════════════════════════════════════════════════════════════╝
 
 import os
+import re
 import streamlit as st
 from groq import Groq
 
@@ -103,11 +104,9 @@ COMPACT_REFS = {
     'FORMAT': 'Specifies date/string format. Used in TO_DATE and TO_STRING. Syntax: FORMAT( "%Y-%m-%d" )',
     'MATCH_STRINGS': 'Finds top-k matching strings by edit distance. Syntax: MATCH_STRINGS( table1.col, table2.col [, TOP_K(k)] [, SEPARATOR(sep)] )',
     'IN_LIKE': 'Pattern matching with wildcards % and _. Syntax: table.col IN_LIKE( "pattern%" ) or IN_LIKE( table2.col )',
-    'READABLE': 'Human-readable CONFORMANCE violation descriptions. Syntax: READABLE( conformance_query )',
     'EDIT_THRESHOLD': 'Edit distance threshold for CLUSTER_STRINGS. Syntax: EDIT_THRESHOLD( distance )',
     'TOP_K': 'Number of matches in MATCH_STRINGS. Syntax: TOP_K( k ) where k <= 100.',
     'SEPARATOR': 'Separator between results in MATCH_STRINGS. Syntax: SEPARATOR( "," )',
-    'RIGHT': 'Used in join type specifications (RIGHT join in MERGE_EVENTLOG scenarios).',
     'ABS': 'Absolute value. Syntax: ABS( table.column )',
     'POWER': 'Value raised to a power. Syntax: POWER( table.col, exponent ) Output: FLOAT.',
     'MODULO': 'Remainder of division. Syntax: MODULO( dividend, divisor ) or dividend % divisor.',
@@ -138,9 +137,6 @@ COMPACT_REFS = {
     'RANGE_APPEND': 'Creates a range and appends to a column. Syntax: RANGE_APPEND( table.col, step_size, range_end )',
     'VARIABLE': 'Dynamic variable in PQL. Use <% if(VAR != "") { %> FILTER ... <% } %> to guard empty variables.',
     'KPI': 'References a saved KPI in OCPM LINK_PATH context.',
-    'ISNULL': 'Returns 1 if NULL, 0 otherwise. Syntax: ISNULL( table.col )',
-    'MODULO': 'Remainder of division. Syntax: MODULO( dividend, divisor ) or dividend % divisor.',
-    'TODAY': 'Current date. Syntax: TODAY( [timezone_id] ) Default: UTC.',
     'UNIQUE_ID': 'Unique INT for each unique tuple of input columns. Syntax: UNIQUE_ID( table.col1, ..., table.colN )',
     'CONSTANT': 'Used as target table in PU-functions to produce a constant result. Syntax: CONSTANT()',
     'COMMON_TABLE': 'References the common table of multiple expressions. Syntax: COMMON_TABLE( expr1, expr2 )',
@@ -149,7 +145,6 @@ COMPACT_REFS = {
     'MERGE_EVENTLOG': 'Merges columns from two activity tables into one. Syntax: MERGE_EVENTLOG( target_table.col, [FILTER ...] )',
     'MERGE_EVENTLOG_DISTINCT': 'Like MERGE_EVENTLOG but removes duplicate activities.',
     'EVENTLOG_SOURCE_TABLE': 'Returns source table name for each row in a dynamic event log. Syntax: EVENTLOG_SOURCE_TABLE( eventlog.col )',
-    'CREATE_EVENTLOG': 'Creates activity table from OCPM object perspective.',
     'LINK_PATH': 'Traverses object links. Syntax: LINK_PATH( table.col [, CONSTRAINED BY (START(...), END(...))] )',
     'LINK_SOURCE': 'Source objects of Object Link. Syntax: LINK_SOURCE( link_name, table.col )',
     'LINK_TARGET': 'Target objects of Object Link. Syntax: LINK_TARGET( link_name, table.col )',
@@ -157,8 +152,6 @@ COMPACT_REFS = {
     'LINK_FILTER_ORDERED': 'Order-aware LINK_FILTER (only for Signal Link). Considers timestamp order.',
     'LINK_ATTRIBUTES': 'Returns link attribute values. Syntax: LINK_ATTRIBUTES( link_name, attr_col )',
     'LINK_OBJECTS': 'Creates table of all objects in the Object Link graph.',
-    'LINK_PATH_SOURCE': 'Source objects used in LINK_PATH traversal.',
-    'LINK_PATH_TARGET': 'Target objects used in LINK_PATH traversal.',
     'UNION_ALL': 'Vertical concatenation of columns. Use with UNION_ALL_PULLBACK.',
     'UNION_ALL_TABLE': 'Vertical concatenation of tables. Syntax: UNION_ALL_TABLE( table1, ..., tableN ) 2-16 tables.',
     'UNION_ALL_PULLBACK': 'Projects UNION_ALL section back to source table. Syntax: UNION_ALL_PULLBACK( union_col, index )',
@@ -178,7 +171,6 @@ COMPACT_REFS = {
     'LINEAR_REGRESSION': 'Linear regression. Syntax: LINEAR_REGRESSION( TRAIN_LM( INPUT(...), OUTPUT(...) ), PREDICT( col ) )',
     'TRAIN_LM': 'Trains a Linear Regression model. Syntax: TRAIN_LM( INPUT( table.col, ... ), OUTPUT( table.col ) )',
     'PREDICT': 'Specifies prediction columns. Syntax: PREDICT( table.col, ... )',
-    'BPMN_CONFORMS': 'Binary BPMN conformance. Syntax: BPMN_CONFORMS( event_table.col, bpmn_model [, ALLOW(...)] )',
     'BPMN_MATCH_EXCESSIVE': 'Activity occurs at right place but too often — used in BPMN_CONFORMS ALLOW list.',
     'BPMN_MATCH_MISSING': 'Required activity missing from trace — BPMN_CONFORMS shorthand.',
     'BPMN_MATCH_OUT_OF_SEQUENCE': 'Activity at wrong position — BPMN_CONFORMS shorthand.',
@@ -188,30 +180,6 @@ COMPACT_REFS = {
     'PARALLEL': 'Models parallel paths in BPMN_CONFORMS. Syntax: PARALLEL("A", "B")',
     'EXCLUSIVE_CHOICE': 'Models XOR gateway in BPMN_CONFORMS.',
     'ALLOW': 'Allows deviations in BPMN_CONFORMS. Syntax: ALLOW( BPMN_MATCH_UNDESIRED(ANY) )',
-    'CONSTRAINED': 'Limits LINK_PATH traversal. Syntax: CONSTRAINED BY( START(...), END(...) )',
-    'START': 'Used in CALC_CROP, LINK_PATH, and BPMN_CONFORMS for start conditions.',
-    'END': 'Used in CALC_CROP and BPMN_CONFORMS for end conditions.',
-    'EXCLUDED': 'Used in BPMN conformance for excluded activities.',
-    'UNMAPPED': 'Used in BPMN_CONFORMS for unmapped activities.',
-    'SYNC': 'Used in BPMN conformance checking to synchronize parallel paths.',
-    'TASK': 'Used in BPMN_CONFORMS model definition: BPMN_TASK "ActivityName"',
-    'VIA': 'Specifies intermediate steps in process path expressions.',
-    'SOURCE': 'Specifies source activities in MERGE_EVENTLOG path expressions.',
-    'TARGET': 'Specifies target activities in MERGE_EVENTLOG path expressions.',
-    'WITH': 'Used in MERGE_EVENTLOG: WITH START(...) / WITH END(...) for artificial nodes.',
-    'INPUT': 'Specifies training input columns in LINEAR_REGRESSION/KMEANS.',
-    'OUTPUT': 'Specifies target output column in LINEAR_REGRESSION.',
-    'BY': 'Part of ORDER BY and PARTITION BY clauses in window functions.',
-    'FROM': 'Used in CURRENCY_CONVERT as FROM("USD") for source currency.',
-    'TO': 'Used in CURRENCY_CONVERT as TO("EUR") for target currency.',
-    'ADD': 'Used in MERGE_EVENTLOG to add columns/tables.',
-    'RANGE': 'Used inside GENERATE_RANGE to define range parameters.',
-    'DIV': 'Integer division. Also % operator for modulo.',
-    'HOURS': 'Time unit specification used in REMAP_TIMESTAMPS.',
-    'WEIGHT': 'Token weight in CLUSTER_STRINGS. Syntax: WEIGHT( "tokens", weight )',
-    'SHORTENED': 'Shortens self-loops in VARIANT. Syntax: VARIANT( ..., SHORTENED(max) )',
-    'BKPF': 'SAP BKPF table reference used in SAP P2P process examples.',
-    'MANUAL_MINER': 'Defines manual transitions for TRANSIT_COLUMN.',
     'COUNT': 'Counts non-NULL rows. Syntax: COUNT(table.column). Often wrapped with GLOBAL() when mixing table levels.',
 }
 
@@ -361,68 +329,35 @@ CATEGORY_ICONS = {
 
 # ──────────────────────────────────────────────────────────────
 # SMART FUNCTION RETRIEVAL
-# Faster detection for PU functions + normal functions
 # ──────────────────────────────────────────────────────────────
 
-import re
-
 FUNCTION_NAMES = list(COMPACT_REFS.keys())
-
-# Pre-categorize PU functions (most commonly used)
 PU_FUNCTIONS = [fn for fn in FUNCTION_NAMES if fn.startswith("PU_")]
 
-# Common query patterns that imply PU usage
 PU_HINT_PATTERNS = [
-    r'per\s+case',
-    r'per\s+vendor',
-    r'per\s+order',
-    r'per\s+customer',
-    r'per\s+\w+',
-    r'group\s+by',
-    r'aggregate',
-    r'count\s+per',
-    r'sum\s+per',
+    r'per\s+case', r'per\s+vendor', r'per\s+order', r'per\s+customer',
+    r'per\s+\w+', r'group\s+by', r'aggregate', r'count\s+per', r'sum\s+per',
 ]
 
-
 def detect_functions(text: str):
-
     text_lower = text.lower()
     found = set()
-
-    # 1️⃣ Direct function mentions
     for fn in FUNCTION_NAMES:
         if fn.lower() in text_lower:
             found.add(fn)
-
-    # 2️⃣ Detect PU usage patterns
     if any(re.search(pattern, text_lower) for pattern in PU_HINT_PATTERNS):
-        found.update(PU_FUNCTIONS[:8])  # add common PU docs
-
+        found.update(PU_FUNCTIONS[:8])
     return list(found)
 
-
 def build_function_context(user_query: str):
-    """
-    Return only relevant function documentation
-    instead of sending the entire 175-function KB.
-    """
-
     funcs = detect_functions(user_query)
-
     if not funcs:
         return ""
-
     docs = []
-
-    for fn in funcs[:12]:   # limit context size
+    for fn in funcs[:12]:
         if fn in COMPACT_REFS:
             docs.append(f"### {fn}\n{COMPACT_REFS[fn]}")
-
     return "\n\n".join(docs)
-
-
-
 
 # ──────────────────────────────────────────────────────────────
 #  SECTION 2 · GROQ MODELS
@@ -436,7 +371,7 @@ GROQ_MODELS = {
 }
 
 # ──────────────────────────────────────────────────────────────
-#  SECTION 3 · SYSTEM PROMPT BUILDER
+#  SECTION 3 · SYSTEM PROMPT BUILDER  (hardened)
 # ──────────────────────────────────────────────────────────────
 
 _SQL_PROHIBITION = """
@@ -446,7 +381,7 @@ These SQL keywords DO NOT EXIST in PQL. If you write any of them, the query is W
   ✗ SELECT   ✗ FROM    ✗ JOIN    ✗ LEFT JOIN   ✗ GROUP BY
   ✗ HAVING   ✗ WITH    ✗ AS (CTE)  ✗ OVER(...)  ✗ ORDER BY (as SQL clause)
 
-### WRONG — this is SQL, not PQL. NEVER write this:
+### WRONG — SQL (never write this):
 ```sql
 SELECT "LFA1"."LIFNR",
        AVG(DATEDIFF(dd, "EKKO"."BEDAT", "EKPO"."LGDAT")) AS LEAD_TIME
@@ -455,7 +390,7 @@ JOIN "EKPO" ON "EKKO"."EBELN" = "EKPO"."EBELN"
 GROUP BY "LFA1"."LIFNR"
 ```
 
-### CORRECT — this is real PQL:
+### CORRECT — real PQL:
 ```pql
 -- Average lead time per vendor (PU aggregates child → parent)
 PU_AVG(
@@ -471,15 +406,12 @@ result table.
 """
 
 _ADVANCED_PATTERNS = """
-## Advanced PQL Patterns — use as building blocks
+## Advanced PQL Patterns
 
 ### P1 · GLOBAL() — prevents join multiplication
-When mixing case-level and activity-level columns, the common table shifts
-and values get multiplied. Wrap aggregations with GLOBAL() to isolate them.
 ```pql
 -- WRONG: CALC_THROUGHPUT multiplied by activity count
 AVG( CALC_THROUGHPUT( CASE_START TO CASE_END, REMAP_TIMESTAMPS("ACTIVITIES"."TIMESTAMP", DAYS) ) )
-
 -- CORRECT
 GLOBAL( AVG( CALC_THROUGHPUT( CASE_START TO CASE_END, REMAP_TIMESTAMPS("ACTIVITIES"."TIMESTAMP", DAYS) ) ) )
 ```
@@ -491,10 +423,7 @@ PU_SUM( "VENDORS", PU_SUM( "ORDERS", "LINE_ITEMS"."AMOUNT" ) )
 
 ### P3 · PU with filter argument (caching-friendly, preferred)
 ```pql
--- GOOD: filter argument preserves caching
 PU_COUNT( "CASES", "ACTIVITIES"."CASE_ID", "ACTIVITIES"."ACTIVITY" = 'Approve' )
--- AVOID: FILTER_TO_NULL breaks caching
-PU_COUNT( "CASES", FILTER_TO_NULL("ACTIVITIES"."CASE_ID") )
 ```
 
 ### P4 · Throughput between specific milestones
@@ -505,7 +434,7 @@ CALC_THROUGHPUT(
 )
 ```
 
-### P5 · Rework detection — activity repeating > N times
+### P5 · Rework detection
 ```pql
 FILTER PU_COUNT(
   "CASES", "ACTIVITIES"."CASE_ID",
@@ -522,87 +451,18 @@ RUNNING_SUM(
 )
 ```
 
-### P7 · First/last occurrence per case using INDEX_ORDER
-```pql
-CASE WHEN INDEX_ORDER(
-  "ACTIVITIES"."TIMESTAMP",
-  ORDER BY ( "ACTIVITIES"."TIMESTAMP" ASC ),
-  PARTITION BY ( "ACTIVITIES"."CASE_ID" )
-) = 1 THEN "ACTIVITIES"."ACTIVITY" ELSE NULL END
-```
-
-### P8 · Safe KPI ratio — avoid common table issues
+### P7 · Safe KPI ratio
 ```pql
 GLOBAL( COUNT( "ACTIVITIES"."TIMESTAMP" ) ) /
 GLOBAL( COUNT( "CASES"."CASE_ID" ) )
 ```
 
-### P9 · Process variant as string
-```pql
-STRING_AGG(
-  "ACTIVITIES"."ACTIVITY", ' → ',
-  ORDER BY ( "ACTIVITIES"."TIMESTAMP" ASC ),
-  PARTITION BY ( "ACTIVITIES"."CASE_ID" )
-)
-```
-
-### P10 · SLA compliance check
-```pql
-CASE WHEN DATEDIFF( dd, "ORDERS"."PROMISE_DATE", "ORDERS"."ACTUAL_DATE" ) > 7
-  THEN 1 ELSE 0 END
-```
-
-### P11 · Activity filtering with MATCH_ACTIVITIES
-```pql
-FILTER MATCH_ACTIVITIES(
-  NODE( 'Approve' ), NODE( 'Pay' ), EXCLUDING( 'Cancel' )
-);
-```
-
-### P12 · BIND for 1:N:1 relationships
-```pql
-PU_SUM( "VENDORS", BIND( "VENDORS", "ORDERS"."AMOUNT" ) )
-```
-
-### P13 · DOMAIN_TABLE for all combinations
-```pql
-PU_SUM(
-  DOMAIN_TABLE( "ACTIVITIES"."CASE_ID", "ACTIVITIES"."ACTIVITY" ),
-  "ACTIVITIES"."VALUE"
-)
-```
-
-### P14 · CONSTANT target for single-value aggregation
-```pql
-PU_AVG( CONSTANT(), "CASES"."THROUGHPUT_TIME" )
-```
-
-### P15 · Workdays between dates
+### P8 · Workdays between dates
 ```pql
 WORKDAYS_BETWEEN(
   WORKDAY_CALENDAR( WEEKDAY_CALENDAR( MON, TUE, WED, THU, FRI ) ),
   "ORDERS"."CREATE_DATE",
   "ORDERS"."CLOSE_DATE"
-)
-```
-
-### P16 · Supplier performance metrics (SAP tables)
-```pql
--- Lead time per vendor
-PU_AVG(
-  "LFA1",
-  DATEDIFF(dd, "EKKO"."BEDAT", "EKPO"."LGDAT")
-)
-
--- Delivery reliability rate per vendor
-PU_COUNT("LFA1", "EKPO"."EBELN",
-  DATEDIFF(dd, "EKPO"."BEDAT", "EKPO"."LGDAT") <= 0
-) /
-PU_COUNT("LFA1", "EKPO"."EBELN")
-
--- On-time delivery count per vendor
-PU_COUNT("LFA1", "EKPO"."EBELN",
-  DATEDIFF(dd, "EKPO"."BEDAT", "EKPO"."LGDAT") <= 0
 )
 ```
 """
@@ -617,30 +477,25 @@ What is the case/base table? What child tables? Join direction: 1:N or N:1?
 Case level or activity level? Mixing levels → GLOBAL() required.
 
 **Step 3 — Filters first**
-FILTER for simple conditions. BIND_FILTERS for non-common tables. FILTER_TO_NULL only when no better option.
+FILTER for simple conditions. BIND_FILTERS for non-common tables.
 
 **Step 4 — Compose KPIs**
-Build innermost aggregation first. Wrap with GLOBAL() at table boundaries. CASE WHEN for conditionals.
+Build innermost aggregation first. Wrap with GLOBAL() at table boundaries.
 
 **Step 5 — Performance check**
-→ PU_COUNT vs PU_COUNT_DISTINCT: use COUNT for key columns
-→ AVG vs MEDIAN: use AVG unless median is required
-→ PU filter arg vs FILTER_TO_NULL: always prefer filter arg
-→ Is GLOBAL() missing anywhere?
+PU_COUNT vs PU_COUNT_DISTINCT · AVG vs MEDIAN · PU filter arg vs FILTER_TO_NULL
 
 **Step 6 — Final query**
-→ Write in ```pql code block
-→ Explain each section
-→ Flag NULL handling, empty tables, join edge cases
+Write in pql block. Explain each section. Flag NULL handling.
 
 ## Anti-patterns — always avoid
-1. Missing GLOBAL() when mixing case + activity columns → value multiplication
-2. FILTER_TO_NULL inside PU-functions by default → kills caching
-3. PU_COUNT_DISTINCT on key column → use PU_COUNT
-4. MEDIAN when AVG is sufficient → expensive sort
+1. Missing GLOBAL() when mixing case + activity columns
+2. FILTER_TO_NULL inside PU-functions
+3. PU_COUNT_DISTINCT on key column
+4. MEDIAN when AVG is sufficient
 5. Missing double-quotes on table/column names
-6. Single-quoting column names (only for string constants)
-7. Writing SQL (SELECT/FROM/JOIN/GROUP BY) instead of PQL → NEVER do this
+6. Single-quoting column names
+7. ANY SQL syntax (SELECT/FROM/JOIN/GROUP BY)
 """
 
 
@@ -661,7 +516,7 @@ Write ACCURATE, OPTIMIZED, PRODUCTION-READY PQL queries.
 
 {_SQL_PROHIBITION}
 
-## Full PQL Function Reference (175 functions)
+## Full PQL Function Reference
 {func_ref}
 """
 
@@ -677,10 +532,9 @@ Write ACCURATE, OPTIMIZED, PRODUCTION-READY PQL queries.
 1. **Analysis** — state what tables, joins, functions are needed
 2. **Query** — complete PQL in a ```pql code block
 3. **Explanation** — explain each part of the query
-4. **Performance notes** — describe optimization choices
-5. **Edge cases** — flag NULL handling or filter propagation issues
+4. **Performance notes** — optimization choices
+5. **Edge cases** — NULL handling or filter propagation issues
 """
-
     elif complexity == "Intermediate":
         base += """
 ## Response Format
@@ -688,7 +542,6 @@ Write ACCURATE, OPTIMIZED, PRODUCTION-READY PQL queries.
 2. Explain each function used
 3. Mention important gotchas
 """
-
     else:
         base += """
 ## Response Format
@@ -697,61 +550,49 @@ Write ACCURATE, OPTIMIZED, PRODUCTION-READY PQL queries.
 """
 
     instructions = {
-        "Basic": """
-Simple queries.
-Use one or two functions maximum.
-Clear placeholder table names.
-""",
-        "Intermediate": """
-Queries may contain 2–5 functions.
-Use filters, CASE WHEN logic, and simple aggregations.
-Explain join directions when necessary.
-""",
-        "Advanced": """
-Use nested functions, GLOBAL(), and PU aggregations.
-Support multi-table logic and performance optimization.
-Always explain why GLOBAL() is required.
-""",
-        "Expert": """
-Write production-ready Celonis PQL.
-
-Capabilities expected:
-- Multi-KPI queries
-- Nested PU aggregations
-- Throughput calculations
-- Rework detection
-- Automation rate calculations
-- Prevent join multiplication using GLOBAL()
-
-Stress-test examples the assistant must solve:
-
-1. Generate a full KPI query calculating throughput time,
-   rework count, and automation rate per vendor while avoiding join multiplication.
-
-2. Write a single PQL query calculating:
-   - average throughput per case
-   - number of rework activities
-   - first activity timestamp
-   - last activity timestamp
-   - automation rate (system activities / total)
-
-Ensure PU functions are used correctly and queries remain performant.
-"""
+        "Basic": "Simple queries. Use one or two functions maximum. Clear placeholder table names.\n",
+        "Intermediate": "Queries may contain 2–5 functions. Use filters, CASE WHEN logic, and simple aggregations.\n",
+        "Advanced": "Use nested functions, GLOBAL(), and PU aggregations. Always explain why GLOBAL() is required.\n",
+        "Expert": "Write production-ready Celonis PQL with multi-KPI queries, nested PU, throughput, rework, and automation rate.\n",
     }
 
     base += f"\n## Complexity: {complexity}\n{instructions[complexity]}\n"
 
     base += """
 When table/column names are unknown use:
-
 "CASES"."CASE_ID"
 "ACTIVITIES"."ACTIVITY"
 "ACTIVITIES"."TIMESTAMP"
 "ORDERS"."AMOUNT"
 "VENDORS"."VENDOR_ID"
 """
-
     return base
+
+# ──────────────────────────────────────────────────────────────
+#  SECTION 3B · VERIFICATION PASS SYSTEM PROMPT
+# ──────────────────────────────────────────────────────────────
+
+VERIFICATION_SYSTEM = """You are a strict Celonis PQL validator and corrector.
+
+Your ONLY job: review PQL code and fix any errors. Return the corrected query.
+
+## Rules to enforce:
+1. NO SQL keywords: SELECT, FROM, JOIN, LEFT JOIN, GROUP BY, HAVING, WITH, AS (CTE), OVER(...)
+2. ALL table/column names must be double-quoted: "TABLE"."COLUMN"
+3. String literals must use single quotes: 'value'
+4. PU_FUNC( target_table, source_table.column [, filter] ) — always 2+ args
+5. CALC_THROUGHPUT used with standard aggregation → must be wrapped in GLOBAL()
+6. COUNT( "TABLE"."COL" ) mixed with activity-level → wrap in GLOBAL()
+7. PU_COUNT_DISTINCT on a key column → replace with PU_COUNT
+8. FILTER_TO_NULL inside PU functions → replace with PU filter argument
+9. PU-function direction: target_table is the PARENT (1-side), source is CHILD (N-side)
+10. MEDIAN used when AVG would work → add a comment noting performance cost
+
+## Response format:
+- If the query is correct: respond with exactly: VALID
+- If the query has errors: respond with only the corrected ```pql code block and a brief bullet list of what was fixed. Nothing else.
+"""
+
 # ──────────────────────────────────────────────────────────────
 #  SECTION 4 · UI CONSTANTS
 # ──────────────────────────────────────────────────────────────
@@ -803,190 +644,57 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-
-/* ───────── Base App Background ───────── */
 .stApp { background:#0a0c10; }
 .main .block-container { background:#0a0c10 !important; padding-top:2rem !important; }
-
-/* ───────── Top Header / Toolbar ───────── */
-header[data-testid="stHeader"] {
-    background:#0a0c10 !important;
-    border-bottom:1px solid #1e2531 !important;
-}
+header[data-testid="stHeader"] { background:#0a0c10 !important; border-bottom:1px solid #1e2531 !important; }
 .stApp > header { background:#0a0c10 !important; }
 [data-testid="stToolbar"] { background:#0a0c10 !important; }
-
-/* ───────── Fix: H1 Title Visibility ───────── */
-h1, h2, h3,
-h1 *, h2 *, h3 * {
-    color:#f1f5f9 !important;
-}
+h1, h2, h3, h1 *, h2 *, h3 * { color:#f1f5f9 !important; }
 [data-testid="stHeadingWithActionElements"] h1,
 [data-testid="stHeadingWithActionElements"] h2,
-[data-testid="stHeadingWithActionElements"] h3 {
-    color:#f1f5f9 !important;
-}
+[data-testid="stHeadingWithActionElements"] h3 { color:#f1f5f9 !important; }
 div[data-testid="stMarkdownContainer"] h1,
 div[data-testid="stMarkdownContainer"] h2,
-div[data-testid="stMarkdownContainer"] h3 {
-    color:#f1f5f9 !important;
-}
-
-/* ───────── Fix: Caption / subtitle text ───────── */
-[data-testid="stCaptionContainer"] p,
-[data-testid="stCaptionContainer"],
-.stCaption, .stCaption p {
-    color:#64748b !important;
-    font-size:13px !important;
-}
-
-/* ───────── General Markdown Text ───────── */
-div[data-testid="stMarkdownContainer"] p {
-    color:#cbd5e1 !important;
-}
-
-/* ── Hide heading anchor link icon ── */
+div[data-testid="stMarkdownContainer"] h3 { color:#f1f5f9 !important; }
+[data-testid="stCaptionContainer"] p, .stCaption, .stCaption p { color:#64748b !important; font-size:13px !important; }
+div[data-testid="stMarkdownContainer"] p { color:#cbd5e1 !important; }
 h1 a, h2 a, h3 a { display:none !important; }
 [data-testid="stHeadingWithActionElements"] a { display:none !important; }
-h1 .anchor-link, h2 .anchor-link, h3 .anchor-link {
-    display:none !important;
-    visibility:hidden !important;
-}
 [data-testid="stHeadingWithActionElements"] button,
 [data-testid="stHeadingWithActionElements"] svg { display:none !important; }
-
-/* ───────── Sidebar ───────── */
-[data-testid="stSidebar"] {
-    background:#0d1117;
-    border-right:1px solid #1e2531;
-}
+[data-testid="stSidebar"] { background:#0d1117; border-right:1px solid #1e2531; }
 [data-testid="stSidebar"] label,
 [data-testid="stSidebar"] p,
 [data-testid="stSidebar"] span { color:#94a3b8 !important; }
 [data-testid="stSidebar"] input,
-[data-testid="stSidebar"] select {
-    background:#161b22 !important;
-    border:1px solid #30363d !important;
-    color:#e2e8f0 !important;
-    border-radius:6px !important;
-}
-
-/* ───────── Chat Messages ───────── */
-[data-testid="stChatMessage"] {
-    background:#0d1117 !important;
-    border:1px solid #1e2531;
-    border-radius:12px !important;
-    margin-bottom:10px;
-    box-shadow:0 4px 14px rgba(0,0,0,0.35);
-}
+[data-testid="stSidebar"] select { background:#161b22 !important; border:1px solid #30363d !important; color:#e2e8f0 !important; border-radius:6px !important; }
+[data-testid="stChatMessage"] { background:#0d1117 !important; border:1px solid #1e2531; border-radius:12px !important; margin-bottom:10px; box-shadow:0 4px 14px rgba(0,0,0,0.35); }
 [data-testid="stChatMessageContent"],
 [data-testid="stChatMessageContent"] p,
 [data-testid="stChatMessageContent"] li,
 [data-testid="stChatMessageContent"] span,
 [data-testid="stChatMessageContent"] ul { color:#e2e8f0 !important; font-size:14px; }
 [data-testid="stChatMessageContent"] strong { color:#f8fafc !important; }
-
-/* ───────── Chat Input Area ───────── */
-[data-testid="stBottom"] {
-    background:#0a0c10 !important;
-    border-top:1px solid #1e2531 !important;
-}
+[data-testid="stBottom"] { background:#0a0c10 !important; border-top:1px solid #1e2531 !important; }
 [data-testid="stBottom"] > div { background:#0a0c10 !important; }
-
-[data-testid="stChatInput"] {
-    background:#161b22 !important;
-    border:1px solid #30363d !important;
-    border-radius:10px !important;
-}
-[data-testid="stChatInput"]:focus-within {
-    border:1px solid #6366f1 !important;
-    box-shadow:0 0 0 2px rgba(99,102,241,0.15) !important;
-}
-[data-testid="stChatInput"] textarea {
-    background:#161b22 !important;
-    color:#f1f5f9 !important;
-    caret-color:#6366f1 !important;
-    border:none !important;
-    border-radius:10px !important;
-    font-size:14px !important;
-}
+[data-testid="stChatInput"] { background:#161b22 !important; border:1px solid #30363d !important; border-radius:10px !important; }
+[data-testid="stChatInput"]:focus-within { border:1px solid #6366f1 !important; box-shadow:0 0 0 2px rgba(99,102,241,0.15) !important; }
+[data-testid="stChatInput"] textarea { background:#161b22 !important; color:#f1f5f9 !important; caret-color:#6366f1 !important; border:none !important; border-radius:10px !important; font-size:14px !important; }
 [data-testid="stChatInput"] textarea::placeholder { color:#475569 !important; }
-[data-testid="stChatInput"] textarea:focus {
-    outline:none !important;
-    box-shadow:none !important;
-    border-color:transparent !important;
-}
-
-/* ───────── Submit Button ───────── */
-[data-testid="stChatInputSubmitButton"] button {
-    background:linear-gradient(135deg,#6366f1,#8b5cf6) !important;
-    border:none !important;
-}
-
-/* ───────── Code Blocks ───────── */
-pre {
-    background:#020617 !important;
-    border:1px solid #1e293b !important;
-    border-radius:10px !important;
-    padding:14px !important;
-    overflow-x:auto !important;
-}
-pre code, code {
-    background:#020617 !important;
-    border:1px solid #1e293b !important;
-    border-radius:8px !important;
-    color:#f1f5f9 !important;
-    font-family:"JetBrains Mono", monospace !important;
-    font-size:13px !important;
-    line-height:1.5 !important;
-}
-
-/* ───────── PQL Syntax Highlight Classes ───────── */
-code .pu, code .fn { color:#22c55e !important; font-weight:600; }
-code .tbl          { color:#60a5fa !important; }
-code .str          { color:#facc15 !important; }
-code .num          { color:#fb7185 !important; }
-
-/* ───────── Function Badges ───────── */
-.func-badge {
-    display:inline-block;
-    padding:2px 8px;
-    margin:2px;
-    border-radius:6px;
-    background:#1e293b;
-    border:1px solid #334155;
-    color:#38bdf8;
-    font-size:11px;
-    font-weight:600;
-    letter-spacing:0.3px;
-}
-
-/* ───────── Buttons ───────── */
-.stButton > button {
-    background:#161b22 !important;
-    border:1px solid #30363d !important;
-    color:#c7d2fe !important;
-    border-radius:8px !important;
-    font-size:12px !important;
-}
-.stButton > button:hover {
-    background:#1e293b !important;
-    border-color:#6366f1 !important;
-    color:#e0e7ff !important;
-    transform:scale(1.02);
-}
-
-/* ───────── Misc Components ───────── */
+[data-testid="stChatInputSubmitButton"] button { background:linear-gradient(135deg,#6366f1,#8b5cf6) !important; border:none !important; }
+pre { background:#020617 !important; border:1px solid #1e293b !important; border-radius:10px !important; padding:14px !important; overflow-x:auto !important; }
+pre code, code { background:#020617 !important; border:1px solid #1e293b !important; border-radius:8px !important; color:#f1f5f9 !important; font-family:"JetBrains Mono", monospace !important; font-size:13px !important; line-height:1.5 !important; }
+.stButton > button { background:#161b22 !important; border:1px solid #30363d !important; color:#c7d2fe !important; border-radius:8px !important; font-size:12px !important; }
+.stButton > button:hover { background:#1e293b !important; border-color:#6366f1 !important; color:#e0e7ff !important; transform:scale(1.02); }
 details { border:1px solid #1e2531 !important; border-radius:8px !important; }
-[data-testid="stMetric"] {
-    background:#0d1117;
-    border:1px solid #1e2531;
-    border-radius:10px;
-    padding:10px 14px;
-}
+[data-testid="stMetric"] { background:#0d1117; border:1px solid #1e2531; border-radius:10px; padding:10px 14px; }
 
+/* Verification badge styles */
+.verify-pass { background:#052e16; border:1px solid #16a34a; border-radius:8px; padding:8px 14px; color:#4ade80; font-size:13px; margin-top:8px; }
+.verify-fix  { background:#1c1004; border:1px solid #d97706; border-radius:8px; padding:8px 14px; color:#fbbf24; font-size:13px; margin-top:8px; }
 </style>
 """, unsafe_allow_html=True)
+
 # ──────────────────────────────────────────────────────────────
 #  SECTION 6 · SESSION STATE
 # ──────────────────────────────────────────────────────────────
@@ -997,6 +705,8 @@ _defaults = {
     'model_id':       'llama-3.3-70b-versatile',
     'show_reasoning': True,
     'total_queries':  0,
+    'verified_count': 0,
+    'fixed_count':    0,
 }
 for k, v in _defaults.items():
     if k not in st.session_state:
@@ -1004,7 +714,6 @@ for k, v in _defaults.items():
 
 # ──────────────────────────────────────────────────────────────
 #  SECTION 7 · GROQ CLIENT
-#  Key priority: st.secrets → environment variable
 # ──────────────────────────────────────────────────────────────
 
 def get_client():
@@ -1023,54 +732,44 @@ client, _api_key = get_client()
 # ──────────────────────────────────────────────────────────────
 
 with st.sidebar:
-
     st.markdown(
         '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">'
         '<div style="width:36px;height:36px;border-radius:9px;'
         'background:linear-gradient(135deg,#6366f1,#8b5cf6);'
         'display:flex;align-items:center;justify-content:center;font-size:18px;">⚡</div>'
         '<div><div style="font-size:15px;font-weight:700;color:#f1f5f9;">PQL Assistant</div>'
-        '<div style="font-size:11px;color:#475569;">175 functions · Groq powered</div></div></div>',
+        '<div style="font-size:11px;color:#475569;">175 functions · auto-verified</div></div></div>',
         unsafe_allow_html=True,
     )
 
     st.divider()
 
-    # Model selector
     st.markdown('**🤖 Model**')
     selected_model = st.selectbox(
-        'Model',
-        options=list(GROQ_MODELS.keys()),
+        'Model', options=list(GROQ_MODELS.keys()),
         index=list(GROQ_MODELS.keys()).index(st.session_state.model_id),
-        format_func=lambda k: GROQ_MODELS[k],
-        label_visibility='collapsed',
+        format_func=lambda k: GROQ_MODELS[k], label_visibility='collapsed',
     )
     st.session_state.model_id = selected_model
     st.caption(f'`{selected_model}`')
 
     st.divider()
 
-    # Complexity slider
     st.markdown('**🎛 Complexity**')
     complexity = st.select_slider(
-        'Complexity',
-        options=['Basic', 'Intermediate', 'Advanced', 'Expert'],
-        value=st.session_state.complexity,
-        label_visibility='collapsed',
+        'Complexity', options=['Basic', 'Intermediate', 'Advanced', 'Expert'],
+        value=st.session_state.complexity, label_visibility='collapsed',
     )
     st.session_state.complexity = complexity
     st.caption(COMPLEXITY_DESC[complexity])
 
-    # Show reasoning toggle
     st.session_state.show_reasoning = st.toggle(
-        'Show query reasoning',
-        value=st.session_state.show_reasoning,
+        'Show query reasoning', value=st.session_state.show_reasoning,
         help='AI explains planning steps before writing the query',
     )
 
     st.divider()
 
-    # Quick examples
     st.markdown('**💡 Quick examples**')
     for ex in EXAMPLE_PROMPTS.get(complexity, EXAMPLE_PROMPTS['Advanced']):
         if st.button(f'→ {ex}', key=f'ex_{ex}', use_container_width=True):
@@ -1078,7 +777,6 @@ with st.sidebar:
 
     st.divider()
 
-    # Function reference panel
     st.markdown('**📚 Function Reference**')
     search = st.text_input('Search functions', placeholder='e.g. PU_COUNT, DATEDIFF…', label_visibility='collapsed')
 
@@ -1100,10 +798,10 @@ with st.sidebar:
 
     st.divider()
 
-    # Stats
-    c1, c2 = st.columns(2)
+    c1, c2, c3 = st.columns(3)
     c1.metric('Queries', st.session_state.total_queries)
-    c2.metric('Messages', len(st.session_state.messages))
+    c2.metric('✅ Valid', st.session_state.verified_count)
+    c3.metric('🔧 Fixed', st.session_state.fixed_count)
 
     if st.button('🗑 Clear chat', use_container_width=True):
         st.session_state.messages = []
@@ -1116,10 +814,9 @@ with st.sidebar:
 st.markdown('## ⚡ PQL Query Assistant')
 st.caption(
     f'Complexity: **{complexity}** · Model: `{st.session_state.model_id}` · '
-    f'{len(COMPACT_REFS)} functions loaded'
+    f'{len(COMPACT_REFS)} functions · 🔍 auto-verified'
 )
 
-# API key warning
 if not _api_key:
     st.warning(
         '**Groq API key not found.**\n\n'
@@ -1129,141 +826,145 @@ if not _api_key:
     )
     st.stop()
 
-# Render history
 for msg in st.session_state.messages:
     with st.chat_message(msg['role'], avatar='⚡' if msg['role'] == 'assistant' else '🧑'):
         st.markdown(msg['content'])
 
-# Welcome on first load
 if not st.session_state.messages:
     with st.chat_message('assistant', avatar='⚡'):
         st.markdown("""
 **Welcome! I'm your PQL Query Assistant.**
 
-I write, explain, and optimize Celonis PQL queries at any complexity level.
+Every query I generate is automatically **verified and corrected** by a second AI pass before you see it — so you always get valid PQL.
 
 **What I can do:**
 - 🔨 **Write** PQL from a plain-English description
 - 🔍 **Explain** existing PQL line by line
 - ⚡ **Optimize** slow or incorrect queries
 - 📚 **Teach** any of the 175 PQL functions with examples
+- ✅ **Auto-verify** every generated query for correctness
 
 **Try asking:**
 - *"Calculate average throughput time per case in days"*
 - *"How do I use PU_COUNT with a filter condition?"*
-- *"Optimize this: AVG( CALC_THROUGHPUT(...) )"*
 - *"Detect rework loops where the same activity repeats more than twice"*
 
 → Use the sidebar to change complexity or browse all 175 functions.
 """)
 
+# ──────────────────────────────────────────────────────────────
+#  SECTION 10 · VERIFICATION ENGINE (two-pass)
+# ──────────────────────────────────────────────────────────────
+
+def extract_pql_blocks(text: str) -> list[str]:
+    """Extract all PQL code blocks from a response."""
+    return re.findall(r"```pql\s*(.*?)```", text, re.S)
 
 
+def verify_and_fix_pql(pql_query: str) -> tuple[bool, str, list[str]]:
+    """
+    Two-pass verification:
+    Pass 1 — fast rule-based checks (no LLM call needed if clean)
+    Pass 2 — LLM review + correction (only if Pass 1 finds issues OR for Advanced/Expert)
 
-# ─────────────────────────────────────────
-# PQL VALIDATOR
-# ─────────────────────────────────────────
-
-def validate_pql(query):
-
+    Returns: (was_modified, final_query, list_of_issues)
+    """
     issues = []
 
-    # Missing quotes
-    if re.search(r'\b[A-Z]+\.[A-Z]+\b', query) and '"' not in query:
-        issues.append("Column names might be missing double quotes.")
+    # ── Pass 1: Rule-based checks ──────────────────────────────
+    SQL_KEYWORDS = [r'\bSELECT\b', r'\bFROM\b', r'\bJOIN\b', r'\bGROUP BY\b',
+                    r'\bHAVING\b', r'\bOVER\s*\(', r'\bAS\s+\w+\s*(?:,|\n|$)']
+    for kw in SQL_KEYWORDS:
+        if re.search(kw, pql_query, re.IGNORECASE):
+            issues.append(f"Contains SQL keyword: `{kw.strip()}`")
 
-    # PU syntax check
-    if "PU_" in query and "," not in query:
-        issues.append("PU functions require syntax: PU_FUNC(target_table, source_column)")
+    # Unquoted table.column references
+    unquoted = re.findall(r'(?<!")\b([A-Z][A-Z0-9_]+)\.([A-Z][A-Z0-9_]+)\b(?!")', pql_query)
+    if unquoted:
+        issues.append(f"Possible unquoted identifiers: {unquoted[:3]}")
 
-    # GLOBAL check
-    if "CALC_THROUGHPUT" in query and "GLOBAL(" not in query:
-        issues.append("Consider wrapping CALC_THROUGHPUT with GLOBAL() when mixing tables.")
+    # PU function with wrong arg count
+    pu_calls = re.findall(r'(PU_\w+)\s*\(([^)]*)\)', pql_query)
+    for fn_name, args in pu_calls:
+        arg_count = len([a for a in args.split(',') if a.strip()])
+        if arg_count < 2:
+            issues.append(f"{fn_name} needs at least 2 arguments (target_table, source_col)")
 
-    # FILTER_TO_NULL warning
-    if "FILTER_TO_NULL" in query:
-        issues.append("FILTER_TO_NULL may break caching inside PU functions.")
+    # CALC_THROUGHPUT without GLOBAL
+    if 'CALC_THROUGHPUT' in pql_query and 'GLOBAL(' not in pql_query:
+        # Only flag if there are other aggregations nearby suggesting mixed context
+        if re.search(r'\b(AVG|COUNT|SUM|MEDIAN)\b', pql_query):
+            issues.append("CALC_THROUGHPUT mixed with other aggregations — consider GLOBAL()")
 
-    return issues
+    # FILTER_TO_NULL inside PU
+    if 'FILTER_TO_NULL' in pql_query and 'PU_' in pql_query:
+        issues.append("FILTER_TO_NULL inside PU function — use PU filter argument instead")
 
-# ─────────────────────────────────────────
-# SELF CORRECTING AGENT
-# ─────────────────────────────────────────
+    # ── Pass 2: LLM review (always runs for Advanced/Expert, or when issues found) ──
+    always_verify = st.session_state.complexity in ('Advanced', 'Expert')
 
-def correct_query_if_needed(query, issues):
-
-    """
-    Uses the LLM to repair invalid PQL queries detected by the validator.
-    """
-
-    repair_prompt = f"""
-You are a Celonis PQL expert.
-
-The following PQL query may contain mistakes.
-
-Issues detected:
-{issues}
-
-Fix the query while keeping the original logic.
-
-Return ONLY the corrected PQL query inside a ```pql block.
-
-Original Query:
-{query}
-"""
+    if not issues and not always_verify:
+        return False, pql_query, []
 
     try:
+        verify_prompt = f"""Review this PQL query for correctness.
 
+```pql
+{pql_query}
+```
+
+{f"Rule-based checks flagged: {issues}" if issues else "Do a thorough correctness review."}
+
+Respond with either:
+- Exactly the word VALID (if the query is correct)
+- Or a corrected ```pql block followed by a brief bullet list of what was fixed
+"""
         response = client.chat.completions.create(
             model=st.session_state.model_id,
             messages=[
-                {"role": "system", "content": "You are a Celonis PQL expert."},
-                {"role": "user", "content": repair_prompt},
+                {"role": "system", "content": VERIFICATION_SYSTEM},
+                {"role": "user", "content": verify_prompt},
             ],
             temperature=0,
-            max_tokens=800
+            max_tokens=1200,
         )
+        result = response.choices[0].message.content.strip()
 
-        text = response.choices[0].message.content
+        if result.upper().startswith("VALID"):
+            return False, pql_query, []
 
-        match = re.search(r"```pql(.*?)```", text, re.S)
-
+        # Extract corrected query
+        match = re.search(r"```pql\s*(.*?)```", result, re.S)
         if match:
-            return match.group(1).strip()
+            corrected = match.group(1).strip()
+            # Extract bullet fixes
+            fixes = re.findall(r'^[-•*]\s+(.+)', result, re.MULTILINE)
+            return True, corrected, fixes if fixes else ["Query corrected by verification pass"]
 
-        return text
+        return False, pql_query, []
 
     except Exception as e:
-        return f"Correction failed: {e}"
+        return False, pql_query, [f"Verification skipped (API error): {e}"]
 
 
-# ── Helper: call Groq with streaming ──────────────────────────
+# ──────────────────────────────────────────────────────────────
+#  SECTION 11 · GROQ STREAMING + VERIFICATION
+# ──────────────────────────────────────────────────────────────
+
 def stream_groq(prompt_override=None):
-
     msgs = st.session_state.messages
-
-    # Get latest user query
     user_query = prompt_override if prompt_override else msgs[-1]["content"]
 
-    # Function-aware retrieval
     func_context = build_function_context(user_query)
+    system = build_system_prompt(st.session_state.complexity, st.session_state.show_reasoning)
 
-    # Build system prompt
-    system = build_system_prompt(
-        st.session_state.complexity,
-        st.session_state.show_reasoning
-    )
-
-    # Inject retrieved function docs
     if func_context:
-        system += "\n\n## Relevant PQL Functions\n" + func_context
+        system += "\n\n## Relevant PQL Functions (retrieved for this query)\n" + func_context
 
-    # If sidebar example triggered
     if prompt_override:
         msgs = msgs + [{'role': 'user', 'content': prompt_override}]
 
     with st.chat_message('assistant', avatar='⚡'):
-
         placeholder = st.empty()
         full = ""
 
@@ -1279,46 +980,49 @@ def stream_groq(prompt_override=None):
                 stream=True,
             )
 
-            # Stream tokens
             for chunk in stream:
                 delta = chunk.choices[0].delta.content or ""
                 full += delta
                 placeholder.markdown(full + "▌")
 
             placeholder.markdown(full)
-
-            # Store assistant message
-            st.session_state.messages.append({
-                "role": "assistant",
-                "content": full
-            })
-
             st.session_state.total_queries += 1
 
-            # ─────────────────────────────────────────
-            # PQL VALIDATION + SELF CORRECTION
-            # ─────────────────────────────────────────
+            # ── Two-pass verification ──────────────────────────
+            pql_blocks = extract_pql_blocks(full)
 
-            match = re.search(r"```pql(.*?)```", full, re.S)
+            if pql_blocks:
+                for pql_block in pql_blocks:
+                    was_modified, final_query, fix_notes = verify_and_fix_pql(pql_block)
 
-            if match:
+                    if was_modified:
+                        st.session_state.fixed_count += 1
+                        st.markdown(
+                            '<div class="verify-fix">🔧 <strong>Auto-corrected</strong> — verification pass fixed issues</div>',
+                            unsafe_allow_html=True
+                        )
+                        for note in fix_notes:
+                            st.caption(f"  • {note}")
+                        st.markdown("**Corrected query:**")
+                        st.code(final_query, language="sql")
+                        # Update stored message with corrected version
+                        full = full.replace(
+                            f"```pql\n{pql_block}\n```",
+                            f"```pql\n{final_query}\n```"
+                        )
+                    else:
+                        st.session_state.verified_count += 1
+                        st.markdown(
+                            '<div class="verify-pass">✅ <strong>Verified</strong> — query passed correctness check</div>',
+                            unsafe_allow_html=True
+                        )
 
-                pql_query = match.group(1).strip()
-
-                issues = validate_pql(pql_query)
-
-                if issues:
-
-                    st.warning("⚠ Validator detected possible PQL issues")
-
-                    corrected = correct_query_if_needed(pql_query, issues)
-
-                    st.markdown("### 🔧 Auto-Corrected Query")
-
-                    st.code(corrected, language="sql")
+            st.session_state.messages.append({"role": "assistant", "content": full})
 
         except Exception as e:
             placeholder.error(f"Groq API error: {e}")
+
+
 # Handle sidebar button → pending prompt
 if '_pending' in st.session_state:
     pending = st.session_state.pop('_pending')
@@ -1334,7 +1038,3 @@ if prompt := st.chat_input('Describe your query, ask about a function, or paste 
     with st.chat_message('user', avatar='🧑'):
         st.markdown(prompt)
     stream_groq()
-
-
-
-
